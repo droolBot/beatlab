@@ -5,11 +5,14 @@
 
 A free beat studio that runs in your browser and works the way FL Studio works: patterns in a channel rack and piano roll, painted onto a playlist, mixed on a mixer, exported as WAV, MP3 and MIDI. It also comes with its own brain that makes and edits beats from plain sentences, running on your own computer with no account and no AI bill.
 
-![BeatLab in Rig layout](beatlab/media/rig.webp)
+
 
 Try it in your browser: **https://droolbot.github.io/beatlab/**
 
 ## What's inside
+
+![BeatLab in Rig layout](beatlab/media/rig.webp)
+
 
 - **The FL workflow.** Numbered patterns, a channel rack with a step graph, a piano roll you can play, and a free playlist with pattern, audio and automation clips. There's a mixer with inserts, buses and sends, and FL's tools, menus and shortcuts, with a cheat sheet on F1. Two layouts: Rig (one big screen with hardware around it) and DAW (floating, resizable windows, like FL).
 - **Built-in instruments.** A sampler, a three-oscillator synth, an FM synth, a wavetable synth, a slicer, and 808 and drum voices, each with presets.
