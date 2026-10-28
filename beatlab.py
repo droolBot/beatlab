@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import sys
 import urllib.parse
-import urllib.request
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -16,7 +15,6 @@ from make_beat import write_midi
 HERE = Path(__file__).parent
 WEB, EXPORTS = HERE / "beatlab", HERE / "exports"
 PORT = 8765
-AUDIO_HOSTS = (".itunes.apple.com", ".mzstatic.com")  # song previews only, so this is not an open proxy
 # FL Studio's own sample packs, if FL is installed: served read-only to the page
 PACKS = next((p for p in sorted(Path("C:/Program Files/Image-Line").glob("FL Studio*/Data/Patches/Packs"), reverse=True) if p.is_dir()), None)
 SAMPLE_TYPES = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".flac": "audio/flac"}
@@ -73,27 +71,8 @@ def library():
     return _library
 
 
-def fetch(url, timeout=15):
-    req = urllib.request.Request(url, headers={"User-Agent": "BeatLab/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read(), r.headers.get("Content-Type", "application/octet-stream")
-
-
 def safe(name):
     return re.sub(r"[^\w\- ]", "", str(name)).strip()[:80] or "beat"
-
-
-def search(q, country):
-    """iTunes Search API: free, no key. An Apple Music link is looked up by its song id."""
-    m = re.search(r"[?&]i=(\d+)", q) or re.search(r"music\.apple\.com/.*?/(\d{6,})", q)
-    if m:
-        url = f"https://itunes.apple.com/lookup?id={m[1]}&country={country}"
-    else:
-        params = {"term": q, "media": "music", "entity": "song", "limit": 25, "country": country}
-        url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(params)
-    results = json.loads(fetch(url)[0])["results"]
-    return [{"title": r.get("trackName"), "artist": r.get("artistName"), "genre": r.get("primaryGenreName", ""),
-             "art": r.get("artworkUrl100"), "preview": r["previewUrl"]} for r in results if r.get("previewUrl")]
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -120,13 +99,6 @@ class Handler(SimpleHTTPRequestHandler):
         url = urllib.parse.urlparse(self.path)
         q = dict(urllib.parse.parse_qsl(url.query))
         try:
-            if url.path == "/api/search":
-                return self.reply(search(q.get("q", ""), safe(q.get("country", "US"))[:2]))
-            if url.path == "/api/audio":
-                host = urllib.parse.urlparse(q.get("url", "")).hostname or ""
-                if not host.endswith(AUDIO_HOSTS):
-                    return self.reply({"error": "Only song previews can be loaded."}, code=400)
-                return self.reply(*fetch(q["url"], 30))
             if url.path == "/api/samples":
                 return self.reply({"root": str(PACKS) if PACKS else None, "files": library()})
             if url.path == "/api/sample":

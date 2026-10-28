@@ -58,6 +58,32 @@ export const PRESETS = {
 
 // ---------- FL Studio's packs as instruments ----------
 const AUDIO = /\.(wav|ogg|flac|mp3)$/i;
+export const isAudio = p => AUDIO.test(p);
+
+// FL ships most pack samples as Ogg Vorbis inside a WAV wrapper (format tag 0x674F/0x6750), which browsers
+// can't open. The wrapper's data chunk is a plain Ogg stream, but some interleave a second, non-audio
+// stream with the sound, so only the first stream's pages are kept. beatlab.py does the same on the desktop.
+export function unwrapOgg(d) {
+  const is = (b, i, s) => [...s].every((c, k) => b[i + k] === c.charCodeAt(0)), u32 = i => (d[i] | d[i + 1] << 8 | d[i + 2] << 16 | d[i + 3] << 24) >>> 0;
+  if (!is(d, 0, 'RIFF') || !is(d, 8, 'WAVE')) return d;
+  for (let i = 12; i + 8 <= d.length;) {
+    const size = u32(i + 4);
+    if (is(d, i, 'data') && is(d, i + 8, 'OggS')) {
+      const ogg = d.subarray(i + 8, i + 8 + size), serial = ogg.subarray(14, 18).join(), pages = [];
+      for (let j = 0; j + 27 <= ogg.length && is(ogg, j, 'OggS');) {
+        let end = j + 27 + ogg[j + 26];
+        for (let k = 0; k < ogg[j + 26]; k++) end += ogg[j + 27 + k];
+        if (ogg.subarray(j + 14, j + 18).join() === serial) pages.push(ogg.subarray(j, end));
+        j = end;
+      }
+      const out = new Uint8Array(pages.reduce((n, p) => n + p.length, 0));
+      pages.reduce((at, p) => (out.set(p, at), at + p.length), 0);
+      return out;
+    }
+    i += 8 + size + (size & 1);
+  }
+  return d;
+}
 const label = s => s.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 const folderOf = p => p.slice(0, p.lastIndexOf('/'));
 const GROUPS = { Keyboard: 'Keys', Piano: 'Keys', Bass: 'Bass', Guitar: 'Guitar', Orchestral: 'Orchestral', Strings: 'Orchestral', Choirs: 'Choir and vocal', Pads: 'Pads', Hits: 'Hits', Percs: 'Hits' };

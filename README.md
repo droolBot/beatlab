@@ -17,7 +17,7 @@ Try it in your browser: **https://droolbot.github.io/beatlab/**
 - **The FL workflow.** Numbered patterns, a channel rack with a step graph, a piano roll you can play, and a free playlist with pattern, audio and automation clips. There's a mixer with inserts, buses and sends, and FL's tools, menus and shortcuts, with a cheat sheet on F1. Two layouts: Rig (one big screen with hardware around it) and DAW (floating, resizable windows, like FL).
 - **Built-in instruments.** A sampler, a three-oscillator synth, an FM synth, a wavetable synth, a slicer, and 808 and drum voices, each with presets.
 - **Built-in effects.** Parametric EQ, multiband compressor, gate, auto-pan, vocoder, delay, reverb, distortion and more. Every plugin has its own window.
-- **Sounds.** BeatLab ships its own kits (Trap, Drill, Lofi, Boom Bap, House), 808s and loops. If FL Studio is installed, BeatLab also plays FL's own packs from your install: multi-sampled instruments, and drum kits with velocity layers.
+- **Sounds.** BeatLab ships its own kits (Trap, Drill, Lofi, Boom Bap, House), 808s and loops. If FL Studio is installed, BeatLab also plays FL's own packs from your install, on the website too: multi-sampled instruments, and drum kits with velocity layers.
 - **The brain.** Ctrl+K takes requests like "make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4". It shows the plan, then does it as one undo. For drums it uses Google's free Magenta models to humanize, write variations and play fills. An optional smart mode runs a small language model (Qwen2.5 1.5B) inside your browser to understand sentences the rules don't.
 - **Finished beats.** Auto mix balances the parts by loudness. Export gives WAV (16, 24 or 32-bit), MP3 at 320 kbps, MIDI for each part, stems, and a loudness report, with mastering to a target LUFS.
 - **Record.** Mic, MIDI keyboard, pads and the computer keyboard all play the selected sound and can record into patterns.
@@ -36,13 +36,17 @@ Optional: some FL Studio samples need ffmpeg to play. To install it, run `winget
 
 ## The website version
 
-The `beatlab/` folder also works as a plain website. Pushing to `main` puts it on GitHub Pages through `.github/workflows/pages.yml`. To turn that on, open the repository's **Settings → Pages** and set the source to **GitHub Actions**.
+https://droolbot.github.io/beatlab/ is the whole studio, song search included, with nothing to install. Use Chrome or Edge.
 
-The website version has everything except the parts that need the local server:
+**FL Studio's sounds on the website.** Open **Sounds**, press **Connect FL Studio** and pick FL's Packs folder: `C:\Program Files\Image-Line\FL Studio 2025\Data\Patches\Packs`. Chrome calls it uploading, but the sounds stay on your computer; the page reads them from there. Your FL instruments and kits then work as they do in the download.
 
-- FL Studio's sounds (it uses BeatLab's own kits instead)
-- song search
-- saving straight to the `exports` folder (exports download as one zip instead)
+A few differences from the downloaded version:
+
+- The browser forgets the FL folder when you close the page, so you connect it again next visit. Beats keep their FL sounds and get them back once it's connected.
+- Exports download as one zip, instead of landing in the `exports` folder.
+- The handful of FL samples that need ffmpeg won't play.
+
+The `beatlab/` folder is the website. Every push to `main` republishes it through `.github/workflows/pages.yml`, after the unit tests pass.
 
 ## The smart brain
 
@@ -72,7 +76,7 @@ That re-renders BeatLab's own sample library from its synths, into `beatlab/samp
 
 | File | What it does |
 | --- | --- |
-| `beatlab.py` | Local server: the studio, exports, FL pack access, song previews |
+| `beatlab.py` | Local server: the studio, exports to the `exports` folder, FL pack access |
 | `beatlab/studio.html`, `app.js` | The studio UI |
 | `beatlab/sound.js` | Audio engine, instruments, effects, mixer, automation |
 | `beatlab/music.js` | Styles, patterns, grooves |

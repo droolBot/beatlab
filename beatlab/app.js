@@ -5,7 +5,7 @@ import {
   arrange, suggestStyles, noteName, songScale, trackName, notesFor, pickKit, COLORS, newTrack, songLength, patternOf, newPatternId, clipId, upgrade, PATTERN_COLORS, ROWS,
 } from './music.js';
 import { Engine, Player, PARAMS, EFFECTS, DELAY_TIMES, GATE_TIMES, PAN_TIMES, VOCODER_BANDS, paramsOf, render, LANES } from './sound.js';
-import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread } from './instruments.js';
+import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
 import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable } from './brain.js';
 import { plan, describe, fromModel } from './intent.js';
@@ -131,14 +131,21 @@ const hint = msg => { $('#hint').textContent = msg; };
 
 function sampleBuffer(path) {  // decoded once, shared by every channel that uses it
   if (!buffers.has(path)) {
+    const decode = bytes => new OfflineAudioContext(2, 1, 44100).decodeAudioData(bytes.buffer);
     const get = async pcm => {
       // with the desktop server every sample comes through it; as a website, BeatLab's own are plain files
-      const r = await fetch(!server && path.startsWith('BeatLab/') ? `samples/${path.split('/').map(encodeURIComponent).join('/')}` : `/api/sample?p=${encodeURIComponent(path)}${pcm ? '&pcm=1' : ''}`);
+      // and FL's come from the visitor's own FL Studio folder
+      if (!server && !path.startsWith('BeatLab/')) {
+        const f = flFiles.get(path);
+        if (!f) throw new Error("Connect FL Studio's Packs folder in the Sounds view to hear this.");
+        return decode(unwrapOgg(new Uint8Array(await f.arrayBuffer())));
+      }
+      const r = await fetch(!server ? `samples/${path.split('/').map(encodeURIComponent).join('/')}` : `/api/sample?p=${encodeURIComponent(path)}${pcm ? '&pcm=1' : ''}`);
       if (!r.ok) throw new Error((await r.json()).error);
-      return new OfflineAudioContext(2, 1, 44100).decodeAudioData(await r.arrayBuffer());
+      return decode(new Uint8Array(await r.arrayBuffer()));
     };
-    // a few of FL's samples only open once BeatLab's server has converted them
-    buffers.set(path, get(false).catch(e => (e.name === 'EncodingError' ? get(true) : Promise.reject(e))).catch(e => { buffers.delete(path); throw e; }));
+    // a few of FL's samples only open once BeatLab's server has converted them (ffmpeg, desktop only)
+    buffers.set(path, get(false).catch(e => (e.name === 'EncodingError' && server ? get(true) : Promise.reject(e))).catch(e => { buffers.delete(path); throw e; }));
   }
   return buffers.get(path);
 }
@@ -152,7 +159,7 @@ const clearInstrument = t => { delete t.inst; delete t.zoneBufs; };
 const clearSample = t => { delete t.sample; delete t.samplePath; delete t.sampleName; };
 
 // FL instruments and kits. Working out every sample's note takes a moment, so the answer is remembered.
-let flInst = [], flKit = [], server = false, hasFL = false;
+let flInst = [], flKit = [], server = false, hasFL = false, flFiles = new Map();
 const zoneCache = () => { try { return JSON.parse(localStorage.getItem('beatlab:zones') ?? '{}'); } catch { return {}; } };
 async function zonesFor(id, files, drum) {
   const cache = zoneCache();
@@ -195,10 +202,11 @@ async function loadKit(kit, only = null) {  // every drum channel takes its hit 
   changed();
   toast(done.length ? `${kit.name} kit on ${done.join(', ')}. Each hit switches takes with how hard it's played.` : `${kit.name} has no hits for these channels.`);
 }
+const reachable = p => server || p.startsWith('BeatLab/') || flFiles.has(p);  // the website keeps FL sounds until FL is connected
 function restoreSounds(tracks) {  // reload FL sounds after an undo, a reload or opening a project
   return Promise.all(tracks.map(t => Promise.all([
-    t.samplePath && !t.sample ? loadSamplePath(t, t.samplePath).catch(() => clearSample(t)) : null,
-    t.inst && !t.zoneBufs ? attachZones(t).catch(() => clearInstrument(t)) : null,
+    t.samplePath && !t.sample && reachable(t.samplePath) ? loadSamplePath(t, t.samplePath).catch(() => clearSample(t)) : null,
+    t.inst && !t.zoneBufs && t.inst.zones.some(z => z.takes.some(reachable)) ? attachZones(t).catch(() => clearInstrument(t)) : null,
   ]))).then(() => { if (ctx) mixChanged(); });
 }
 // FL instruments that suit the style go on the chords, the lead and, where a played bass suits it, the bass
@@ -955,15 +963,23 @@ const COUNTRIES = [['IN', 'India'], ['US', 'US'], ['GB', 'UK'], ['CA', 'Canada']
 function renderCountry() {
   $('#country-pick').replaceChildren(picker({ label: 'Store country', value: ui.country, options: COUNTRIES.map(([value, label]) => ({ value, label })), onChange: v => { ui.country = v; save(); renderCountry(); } }));
 }
+// iTunes Search API: free, no key, and open to web pages, so the studio asks Apple directly.
+// An Apple Music link is looked up by its song id.
+async function findSongs(q, country) {
+  const id = q.match(/[?&]i=(\d+)/)?.[1] ?? q.match(/music\.apple\.com\/.*?\/(\d{6,})/)?.[1];
+  const url = id ? `https://itunes.apple.com/lookup?id=${id}&country=${country}`
+    : `https://itunes.apple.com/search?${new URLSearchParams({ term: q, media: 'music', entity: 'song', limit: 25, country })}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(r.status === 403 || r.status === 429 ? 'Apple is limiting searches for a minute.' : `Apple answered ${r.status}.`);
+  return (await r.json()).results.filter(x => x.previewUrl).map(x => ({ title: x.trackName, artist: x.artistName, genre: x.primaryGenreName ?? '', art: x.artworkUrl100, preview: x.previewUrl }));
+}
 async function search(e) {
   e.preventDefault();
   const q = $('#q').value.trim(), list = $('#results');
   if (!q) return;
-  if (!server) return list.replaceChildren(h('li', { class: 'muted' }, 'Song search needs the desktop version of BeatLab (it fetches the previews). You can still drop an audio file from your computer here to analyze it.'));
   list.replaceChildren(h('li', { class: 'muted' }, 'Searching…'));
   try {
-    const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&country=${ui.country}`), items = await r.json();
-    if (!r.ok) throw new Error(items.error);
+    const items = await findSongs(q, ui.country);
     if (!items.length) return list.replaceChildren(h('li', { class: 'muted' }, `No songs found for "${q}". Try adding the artist, another country, or paste an Apple Music link.`));
     list.replaceChildren(...items.map(it => h('li', {},
       h('img', { src: it.art, alt: '', loading: 'lazy' }),
@@ -987,8 +1003,8 @@ function togglePreview(it, btn) {
 async function analyzeItem(it) {
   previewAudio.pause();
   try {
-    const r = await fetch(`/api/audio?url=${encodeURIComponent(it.preview)}`);
-    if (!r.ok) throw new Error((await r.json()).error);
+    const r = await fetch(it.preview);
+    if (!r.ok) throw new Error(`Apple answered ${r.status}.`);
     await setRef(it, await r.arrayBuffer());
   } catch (err) {
     $('#ref').hidden = false;
@@ -1000,20 +1016,41 @@ async function analyzeItem(it) {
 async function loadLibrary() {
   try {
     const own = await fetch('samples/index.json').then(r => r.json()).then(j => j.files, () => []);
-    const fl = await fetch('/api/samples').then(r => (r.ok && /json/.test(r.headers.get('content-type') ?? '') ? r.json() : null)).catch(() => null);
-    server = !!fl;  // without the desktop server BeatLab runs as a website: no FL sounds, exports download as a zip
-    lib = [...(fl?.files ?? []), ...own];
-    hasFL = !!fl?.files?.length;
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);  // BeatLab's server only ever runs on this PC
+    const fl = local ? await fetch('/api/samples').then(r => (r.ok && /json/.test(r.headers.get('content-type') ?? '') ? r.json() : null)).catch(() => null) : null;
+    server = !!fl;  // without the desktop server BeatLab runs as a website: FL sounds from a folder you pick, exports as a zip
+    const packs = server ? fl.files : [...flFiles.keys()].sort();
+    lib = [...packs, ...own];
+    hasFL = packs.length > 0;
     flInst = flInstruments(lib);
     flKit = flKits(lib);
-    $('#lib-note').textContent = hasFL
+    $('#lib-note').replaceChildren(hasFL
       ? `${lib.length} sounds: FL Studio's packs and BeatLab's own kits. Click one to hear it, then Load it onto the selected channel or drag it onto any channel.`
-      : `${lib.length} of BeatLab's own sounds: drum kits, 808s and loops. ${server ? "FL Studio's packs weren't found on this computer." : 'FL Studio\'s packs join them in the desktop version.'} You can also drop WAV or MP3 files onto any channel.`;
+      : `${lib.length} of BeatLab's own sounds: drum kits, 808s and loops. ${server ? "FL Studio's packs weren't found on this computer." : 'Have FL Studio? Connect its Packs folder and its sounds join them.'} You can also drop WAV or MP3 files onto any channel.`,
+      ...(server || hasFL ? [] : [' ', h('button', { class: 'btn small', id: 'connect-fl', onclick: connectFL }, 'Connect FL Studio')]));
   } catch {
     $('#lib-note').textContent = "Couldn't read the sample library. Is BeatLab still running?";
   }
   renderBrain();
   renderSounds();
+}
+// As a website, FL Studio's packs come from the visitor's own FL install: they pick its Packs folder and
+// the browser reads the sounds from there. Nothing is uploaded, and it's picked again after a reload.
+function connectFL() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.webkitdirectory = true;
+  input.onchange = async () => {
+    const files = [...input.files].filter(f => isAudio(f.name)), at = p => { const s = p.split('/'), i = s.findIndex(x => /^packs$/i.test(x)); return s.slice(i + 1 || 1).join('/'); };
+    if (!files.length) return toast("That folder has no sounds in it. Pick FL Studio's Packs folder: Program Files, Image-Line, FL Studio, Data, Patches, Packs.");
+    flFiles = new Map(files.map(f => [at(f.webkitRelativePath), f]));
+    await loadLibrary();
+    await restoreSounds(song.tracks);
+    renderView();
+    toast(`FL Studio connected: ${flFiles.size} sounds, ${flInst.length} instruments and ${flKit.length} drum kits. Make a beat picks from them now.`);
+  };
+  toast("Pick FL Studio's Packs folder: Program Files, Image-Line, FL Studio, Data, Patches, Packs. Chrome calls it uploading, but the sounds stay on your computer.");
+  input.click();
 }
 function sampleRow(p, depth, showFolder) {
   const parts = p.split('/'), name = parts.pop().replace(/\.\w+$/, ''), sel = track(ui.selected);

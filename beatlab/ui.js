@@ -214,7 +214,7 @@ addEventListener('pointerdown', e => { if (openMenu && !openMenu.contains(e.targ
 // A dropdown button that shows the current choice and opens a menu of options [{value, label, hint?, swatch?}]
 export function picker({ value, options, onChange, label, className = '' }) {
   const current = options.find(o => o.value === value) ?? options[0];
-  const btn = h('button', { class: `picker ${className}`, 'aria-haspopup': 'menu', 'aria-label': `${label}: ${current?.label}`, title: label },
+  const btn = h('button', { type: 'button', class: `picker ${className}`, 'aria-haspopup': 'menu', 'aria-label': `${label}: ${current?.label}`, title: label },
     current?.swatch ? h('span', { class: 'swatch', style: `background:${current.swatch}` }) : null, h('span', { class: 'picker-text' }, current?.label ?? ''), icon('down', 14));
   btn.addEventListener('click', () => menu(btn, options.map(o => ({ ...o, active: o.value === value, onSelect: () => onChange(o.value) }))));
   return btn;

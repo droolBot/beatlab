@@ -101,5 +101,7 @@
    five loops, all rendered from BeatLab's synths by tools/make_samples.mjs), Install BeatLab.bat
    (Python check, Desktop and Start menu shortcuts), a website version for GitHub Pages (BeatLab's
    sounds, exports as one zip), a README with credits and licences, and the test suites in the repo.
+   **Website, the whole studio (2026-10-28):** song search asks Apple directly (no server), and Connect
+   FL Studio reads the visitor's own Packs folder in the browser, so FL instruments and kits work online.
 5. **Depth:** an AudioWorklet engine for lower CPU, sends between inserts, ghost channels, and more of
    FL's long tail.
