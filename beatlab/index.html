@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BeatLab</title>
+<meta name="description" content="BeatLab: a free beat studio that runs on your computer and works the way FL Studio works. Patterns, playlist, piano roll, mixer, a brain that writes with you, and export straight to FL Studio.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<style>
+  /* A pinned stage that the scroll plays like a tape (sage paper, olive-black ink, one orange), then the
+     studio itself, section by section, in the same print. */
+  :root {
+    --paper: #A6AE92; --paper-hi: #B3BA9F; --ink: #171A12; --ink-2: rgba(23,26,18,0.7); --ink-3: rgba(23,26,18,0.16); --orange: #F2540F; --studio: #141414;
+    --label: 600 clamp(9px, 0.82vw, 13px)/1.18 'Space Grotesk', system-ui, sans-serif;
+    --mono: 600 12px/1.2 'IBM Plex Mono', ui-monospace, monospace;
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    --ease: cubic-bezier(.7, 0, .2, 1);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 500 14px/1.4 'Space Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  img, video { display: block; max-width: 100%; }
+  .grain { position: fixed; inset: 0; z-index: 60; pointer-events: none; background: var(--grain); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  /* ---------- the stage ---------- */
+  .tape { position: relative; height: 1300vh; }
+  .stage { position: sticky; top: 0; height: 100vh; overflow: hidden; }
+  .stage > * { position: absolute; }
+  .stage::after { content: ''; position: absolute; inset: 0; z-index: 29; pointer-events: none; background: radial-gradient(130% 100% at 50% 45%, transparent 55%, rgba(30,36,20,0.22)); }
+  #fx { inset: 0; width: 100%; height: 100%; z-index: 3; }
+  #gl { inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+  #frame { inset: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+
+  /* the bezel's printing */
+  .hud { z-index: 11; font: var(--label); text-transform: uppercase; letter-spacing: 0.01em; white-space: nowrap; }
+  .hud a { pointer-events: auto; }
+  .hud a:hover, .hud a:focus-visible { color: var(--orange); outline: none; }
+  .tl { left: 1.45vw; top: 1.55vh; display: flex; align-items: flex-start; gap: 2.6vw; }
+  .tr { right: 1.45vw; top: 1.55vh; display: flex; align-items: flex-start; gap: 4vw; }
+  .bl { left: 2.4vw; bottom: 2.2vh; display: flex; align-items: flex-end; gap: 10px; }
+  .br { right: 2.4vw; bottom: 2.2vh; }
+  .bl .box { display: grid; place-items: center; width: 2vw; min-width: 22px; height: 2.4vh; min-height: 16px; background: var(--ink); color: var(--paper); font-size: 0.75em; opacity: 0; }
+  .dot::before { content: ''; display: inline-block; width: 0.55em; height: 0.55em; margin-right: 0.5em; border-radius: 50%; background: var(--ink); vertical-align: 0.08em; }
+  .dot.live::before { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
+  .glyph { display: block; margin-top: 2px; }
+  .logo { left: 50%; top: 0.9vh; transform: translateX(-50%); z-index: 11; width: clamp(150px, 15.5vw, 260px); }
+  .logo svg, .swoosh svg { display: block; width: 100%; height: auto; }
+  .swoosh { top: 2.2vh; z-index: 11; width: clamp(50px, 5.2vw, 90px); }
+  .swoosh.l { left: 30vw; } .swoosh.r { right: 30vw; transform: scaleX(-1); }
+  .pct { z-index: 11; top: 50%; transform: translateY(-50%); font: 600 clamp(11px, 1.15vw, 18px) 'Space Grotesk', sans-serif; }
+  .pct.l { left: 19vw; } .pct.r { right: 19vw; }
+  .dimv { z-index: 11; font: 600 clamp(8px, 0.62vw, 11px) 'Space Grotesk', sans-serif; transform: translate(-50%, 0); }
+  .strip-label { z-index: 11; left: 50%; transform: translate(-50%, -50%); font: var(--label); font-size: clamp(8px, 0.62vw, 11px); text-transform: uppercase; opacity: 0; }
+  .hint { z-index: 11; left: 50%; bottom: 3vh; transform: translateX(-50%); font: var(--label); text-transform: uppercase; color: var(--ink-2); }
+  .lede { z-index: 11; left: 50%; bottom: 8.5vh; transform: translateX(-50%); width: min(560px, 80vw); text-align: center; font: 500 clamp(13px, 1.05vw, 17px)/1.4 'Space Grotesk', sans-serif; }
+  .lede b { font-weight: 600; }
+
+  /* the waveform tag */
+  .tag { z-index: 12; left: 1.6vw; bottom: 7.2vh; width: clamp(150px, 11vw, 200px); display: grid; grid-template-columns: 1fr auto; gap: 1.2vh 6px; padding: 7px 8px 6px; background: var(--orange); color: var(--ink); font: 600 clamp(10px, 0.8vw, 13px) 'Space Grotesk', sans-serif; opacity: 0; }
+  .tag i { font-style: normal; border: 1.5px solid var(--ink); border-radius: 3px; padding: 0 3px; font-size: 0.8em; align-self: center; }
+  .tag button { all: unset; cursor: pointer; grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; text-transform: lowercase; }
+  .tag button:hover b, .tag button:focus-visible b { text-decoration: underline; }
+  .tag button:disabled { cursor: default; }
+  .tag small { grid-column: 1 / -1; font-weight: 500; font-size: 0.85em; line-height: 1.25; }
+
+  /* UNLEASH THE BEAT */
+  .marquee { z-index: 4; left: 0; top: 50%; display: flex; align-items: center; white-space: nowrap; will-change: transform; pointer-events: none; }
+  .marquee canvas { flex: none; width: 100vw; height: 16vh; }
+  .marquee .word { font: 400 38vh/0.8 Anton, 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: -0.005em; transform-origin: left center; padding-left: 1vw; }
+
+  /* the parts of the studio, called out on the open player */
+  #callouts { inset: 0; z-index: 9; pointer-events: none; }
+  .callout { position: absolute; display: flex; align-items: center; gap: 8px; opacity: 0; translate: 0 -50%; font: var(--label); font-size: clamp(9px, 0.7vw, 12px); text-transform: uppercase; white-space: nowrap; pointer-events: none; }
+  .callout.left { flex-direction: row-reverse; translate: -100% -50%; }
+  .callout::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); flex: none; }
+  .callout i { display: block; height: 1px; background: var(--ink); width: 5vw; }
+  .callout b { font-family: 'IBM Plex Mono', monospace; color: var(--orange); margin-right: 0.5em; }
+  .unpacked { z-index: 12; left: 50%; bottom: 8vh; transform: translateX(-50%); text-align: center; opacity: 0; pointer-events: none; width: min(1200px, 92vw); }
+  .unpacked p { margin: 0; font: var(--label); text-transform: uppercase; }
+  .unpacked h2 { margin: 0.25em 0 0; font: 400 clamp(30px, 4.4vw, 74px)/0.92 Anton, sans-serif; text-transform: uppercase; }
+
+  .tab { z-index: 12; left: 50%; bottom: 0; transform: translateX(-50%); width: clamp(170px, 14vw, 250px); height: clamp(28px, 3.6vh, 40px); display: grid; place-items: center; font: var(--label); text-transform: uppercase; opacity: 0; pointer-events: none; background: var(--orange); clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%); }
+  .tab.on { pointer-events: auto; }
+  .tab:hover, .tab:focus-visible { color: var(--paper); outline: none; }
+  .loading { z-index: 12; left: 50%; top: 50%; transform: translate(-50%, -50%); font: var(--label); text-transform: uppercase; transition: opacity 300ms; }
+
+  /* ---------- the page ---------- */
+  .nav { position: fixed; z-index: 50; left: 50%; top: 14px; display: flex; align-items: center; gap: 4px; padding: 5px 5px 5px 14px; border-radius: 999px; background: rgba(166,174,146,0.82); backdrop-filter: blur(10px) saturate(1.2); border: 1.5px solid var(--ink); font: var(--label); text-transform: uppercase; translate: -50% -160%; transition: translate .6s var(--ease); }
+  .nav.on { translate: -50% 0; }
+  .nav b { font: 400 18px/1 Anton, sans-serif; letter-spacing: 0.06em; margin-right: 10px; }
+  .nav a { padding: 8px 12px; border-radius: 999px; }
+  .nav a:hover, .nav a:focus-visible { background: var(--ink-3); outline: none; }
+  .nav a.go { background: var(--ink); color: var(--paper); }
+  .nav a.go:hover, .nav a.go:focus-visible { background: var(--orange); color: var(--ink); }
+
+  .wrap { width: min(1280px, 100% - 8vw); margin-inline: auto; }
+  .page { position: relative; z-index: 2; }
+  .page section { padding-block: 15vh; }
+  .kick { display: flex; align-items: center; gap: 10px; margin: 0; font: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+  .kick::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--orange); flex: none; }
+  .page h2 { margin: 18px 0 22px; font: 400 clamp(44px, 6.2vw, 104px)/0.9 Anton, 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: -0.005em; }
+  .page p { font-size: clamp(15px, 1.12vw, 18px); line-height: 1.55; max-width: 34em; margin: 0 0 1em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 22px 0 0; padding: 0; list-style: none; }
+  .chips li { font: var(--mono); font-size: 11px; text-transform: uppercase; border: 1.5px solid var(--ink); border-radius: 999px; padding: 6px 10px; }
+  .chips li kbd { font: inherit; background: var(--ink); color: var(--paper); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; font: var(--label); font-size: 13px; text-transform: uppercase; border-radius: 999px; padding: 14px 22px; border: 1.5px solid var(--ink); }
+  .btn.fill { background: var(--ink); color: var(--paper); }
+  .btn:hover, .btn:focus-visible { background: var(--orange); color: var(--ink); border-color: var(--orange); outline: none; }
+
+  /* scroll-driven entrances where the browser has them; elsewhere everything simply shows */
+  @supports (animation-timeline: view()) {
+    .rise { animation: rise linear both; animation-timeline: view(); animation-range: entry 5% cover 28%; }
+    @keyframes rise { from { opacity: 0; transform: translateY(48px); filter: blur(8px); } }
+    .window-in { animation: window-in linear both; animation-timeline: view(); animation-range: entry 0% cover 42%; }
+    @keyframes window-in { from { clip-path: inset(30% 34% 30% 34% round 999px); transform: scale(0.9); } to { clip-path: inset(0 round 18px); transform: none; } }
+    .screen.window-in { animation-timeline: --features; animation-range: entry 10% entry 75%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .rise, .window-in { animation: none !important; } }
+
+  /* 1 the statement: words ink in as you read */
+  .manifesto { padding-top: 22vh !important; }
+  .page .big { margin: 28px 0 0; font: 500 clamp(28px, 3.7vw, 62px)/1.1 'Space Grotesk', sans-serif; letter-spacing: -0.025em; max-width: 21em !important; }
+  .big .w { opacity: 0.14; transition: opacity .35s; }
+  .big .w.lit { opacity: 1; }
+  .big em { font-style: normal; background: linear-gradient(var(--orange), var(--orange)) 0 92% / 0% 0.16em no-repeat; transition: background-size .8s var(--ease); }
+  .big em.lit { background-size: 100% 0.16em; }
+
+  /* 2 the studio, one part at a time: steps scroll, the screen stays */
+  .features { view-timeline: --features block; display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 5vw; padding-block: 4vh !important; }
+  .step { min-height: 96vh; display: flex; flex-direction: column; justify-content: center; opacity: 0.22; transition: opacity .6s; }
+  .step.on { opacity: 1; }
+  .step h2 { font-size: clamp(40px, 4.6vw, 80px) !important; }
+  .rail { display: flex; gap: 6px; margin-bottom: 26px; }
+  .rail i { width: 26px; height: 4px; border-radius: 2px; background: var(--ink-3); }
+  .screen-wrap { position: sticky; top: 0; height: 100vh; display: grid; align-items: center; }
+  .screen { position: relative; aspect-ratio: 2 / 1; border-radius: 18px; background: var(--studio); border: 1.5px solid var(--ink); box-shadow: 0 50px 90px -40px rgba(23,26,18,0.75); overflow: hidden; }
+  .media { position: absolute; inset: 0; clip-path: circle(0% at 4% 6%); transition: clip-path 1s var(--ease); background: var(--studio); }
+  .media.on { clip-path: circle(150% at 4% 6%); }
+  .media video, .media img { width: 100%; height: 100%; object-fit: contain; }
+  .media .float { position: absolute; right: 3%; bottom: 5%; width: 38%; height: auto; border-radius: 10px; box-shadow: 0 24px 50px rgba(0,0,0,0.55); translate: 0 30%; opacity: 0; transition: translate 1s .5s var(--ease), opacity .6s .5s; }
+  .media.on .float { translate: 0 0; opacity: 1; }
+  .screen-tab { position: absolute; z-index: 20; left: 0; top: 0; display: flex; gap: 8px; align-items: center; padding: 8px 14px 9px 12px; background: var(--orange); font: var(--mono); font-size: 11px; text-transform: uppercase; border-bottom-right-radius: 12px; }
+  .screen-tab b { font-family: 'Space Grotesk', sans-serif; }
+  .screen-cap { margin-top: 14px; font: var(--mono); font-size: 11px; text-transform: uppercase; color: var(--ink-2); display: flex; justify-content: space-between; }
+
+  /* 3 two layouts, one line between them */
+  .compare .head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 5vw; align-items: end; margin-bottom: 6vh; }
+  .cmp { position: relative; aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; border: 1.5px solid var(--ink); background: var(--studio); box-shadow: 0 50px 90px -40px rgba(23,26,18,0.75); --x: 50%; user-select: none; }
+  .cmp img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cmp img.top { clip-path: inset(0 calc(100% - var(--x)) 0 0); }
+  .cmp .handle { position: absolute; top: 0; bottom: 0; left: var(--x); width: 3px; margin-left: -1.5px; background: var(--orange); pointer-events: none; }
+  .cmp .handle::after { content: '‹ ›'; position: absolute; top: 50%; left: 50%; translate: -50% -50%; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; background: var(--orange); color: var(--ink); font: 700 18px/1 'IBM Plex Mono', monospace; letter-spacing: -0.1em; }
+  .cmp .lbl { position: absolute; bottom: 16px; padding: 7px 12px; border-radius: 999px; background: rgba(20,20,20,0.75); color: #eee; font: var(--mono); font-size: 11px; text-transform: uppercase; pointer-events: none; }
+  .cmp .lbl.l { left: 16px; } .cmp .lbl.r { right: 16px; }
+  .cmp input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+  .cmp:has(input:focus-visible) { outline: 3px solid var(--orange); outline-offset: 4px; }
+
+  /* the styles, running past */
+  .band { overflow: hidden; border-block: 1.5px solid var(--ink); padding: 2.4vh 0; }
+  .band-row { display: flex; width: max-content; gap: 0; font: 400 clamp(48px, 7vw, 120px)/1 Anton, sans-serif; text-transform: uppercase; white-space: nowrap; will-change: transform; }
+  .band-row span { padding-right: 0.5em; }
+  .band-row span:nth-child(4n+3) { color: transparent; -webkit-text-stroke: 1.5px var(--ink); }
+  .band-row span.star { color: var(--orange); -webkit-text-stroke: 0; }
+
+  /* 4 the plugins: the scroll turns sideways */
+  .plugins { height: 320vh; padding: 0 !important; }
+  .plugins .pin { position: sticky; top: 0; height: 100vh; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; align-content: center; gap: 5vh; padding-top: 9vh; }
+  .plugins .head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 5vw; align-items: end; }
+  .plugins .head h2 { margin-bottom: 0; }
+  .track { display: flex; gap: 16px; padding-inline: 4vw; will-change: transform; align-self: start; }
+  .card { flex: none; width: clamp(220px, 19vw, 300px); height: clamp(260px, 40vh, 380px); display: grid; grid-template-rows: auto 1fr auto; padding: 18px; border-radius: 16px; border: 1.5px solid var(--ink); background: var(--paper-hi); }
+  .card.fx { background: var(--ink); color: var(--paper); }
+  .card .cat { font: var(--mono); font-size: 10.5px; text-transform: uppercase; display: flex; justify-content: space-between; opacity: 0.75; }
+  .card svg { align-self: center; justify-self: center; width: 72%; height: auto; }
+  .card h3 { margin: 0; font: 400 clamp(26px, 2.2vw, 38px)/0.95 Anton, sans-serif; text-transform: uppercase; }
+  .card p { margin: 6px 0 0 !important; font-size: 13.5px !important; line-height: 1.35 !important; opacity: 0.8; }
+  .card.next { border-style: dashed; background: transparent; }
+
+  /* 5 the numbers */
+  .numbers { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; padding-block: 10vh !important; }
+  .num { border-left: 1.5px solid var(--ink); padding: 0 1.4vw; }
+  .num b { display: block; font: 400 clamp(64px, 8vw, 140px)/0.9 Anton, sans-serif; font-variant-numeric: tabular-nums; }
+  .num span { font: var(--mono); font-size: 11.5px; text-transform: uppercase; }
+
+  /* 6 the keys */
+  .keys .head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 5vw; align-items: end; margin-bottom: 7vh; }
+  .keyboard { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+  .key { display: grid; grid-template-rows: auto 1fr; gap: 14px; padding: 14px; border-radius: 14px; background: var(--paper-hi); border: 1.5px solid var(--ink); box-shadow: 0 6px 0 var(--ink); transition: transform .12s, box-shadow .12s; }
+  .key kbd { justify-self: start; min-width: 52px; padding: 10px 12px; border-radius: 9px; background: var(--ink); color: var(--paper); font: 700 16px/1 'IBM Plex Mono', monospace; text-align: center; }
+  .key span { align-self: end; font: var(--mono); font-size: 11.5px; text-transform: uppercase; }
+  .key.down { transform: translateY(5px); box-shadow: 0 1px 0 var(--ink); }
+  .key.down kbd { background: var(--orange); color: var(--ink); }
+
+  /* 7 getting started */
+  .start .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 6vh 0; }
+  .start .s { padding: 22px; border-radius: 16px; border: 1.5px solid var(--ink); min-height: 230px; display: grid; grid-template-rows: auto 1fr auto; }
+  .start .s b { font: 400 64px/1 Anton, sans-serif; color: var(--orange); -webkit-text-stroke: 1.5px var(--ink); }
+  .start .s h3 { margin: 0 0 6px; font: 600 20px/1.2 'Space Grotesk', sans-serif; }
+  .start .s p { font-size: 15px !important; margin: 0 !important; color: var(--ink-2); }
+  .start .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .start .row small { font: var(--mono); font-size: 11px; text-transform: uppercase; color: var(--ink-2); }
+
+  /* 8 questions */
+  .faq .head { margin-bottom: 5vh; }
+  .faq details { border-top: 1.5px solid var(--ink); }
+  .faq details:last-of-type { border-bottom: 1.5px solid var(--ink); }
+  .faq summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 24px 0; font: 600 clamp(18px, 1.6vw, 26px)/1.2 'Space Grotesk', sans-serif; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: '+'; flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1.5px solid var(--ink); font: 500 22px/1 'IBM Plex Mono', monospace; transition: rotate .4s var(--ease), background .3s; }
+  .faq details[open] summary::after { rotate: 45deg; background: var(--orange); }
+  .faq summary:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+  .faq details p { padding-bottom: 24px; margin: 0 !important; color: var(--ink-2); }
+  @supports (interpolate-size: allow-keywords) {
+    .faq { interpolate-size: allow-keywords; }
+    .faq details::details-content { height: 0; overflow: clip; transition: height .5s var(--ease), content-visibility .5s allow-discrete; }
+    .faq details[open]::details-content { height: auto; }
+  }
+
+  /* 9 the way out: the orange swallows the page, the bars rise, OPEN STUDIO rolls by */
+  .end { position: relative; z-index: 2; }
+  .door { height: 240vh; }
+  .door .pin { position: sticky; top: 0; height: 100vh; overflow: hidden; background: var(--paper); }
+  .door .orange { position: absolute; inset: 0; background: var(--orange); clip-path: polygon(43% 100%, 46% 96%, 54% 96%, 57% 100%); }
+  #finbars { position: absolute; left: 0; top: 13vh; width: 100%; height: 74vh; }
+  .finale { position: absolute; left: 0; top: 50%; display: flex; align-items: center; white-space: nowrap; will-change: transform; }
+  .finale a { font: 400 min(18.6vw, 40vh)/0.8 Anton, 'Arial Narrow', sans-serif; text-transform: uppercase; display: inline-block; transform: scaleY(2.05); padding: 0 1vw; letter-spacing: -0.01em; }
+  .finale a:hover, .finale a:focus-visible { color: #000; outline: none; }
+  .finale svg { flex: none; width: 11vh; height: 44vh; margin: 0 1vw 0 -1vw; transform: translateY(6vh); }
+  .door .note { position: absolute; left: 50%; bottom: 6vh; translate: -50% 0; display: flex; gap: 2vw; align-items: center; font: var(--label); text-transform: uppercase; opacity: 0; white-space: nowrap; }
+  .door .note a { border: 1.5px solid var(--ink); border-radius: 999px; padding: 0.8em 1.4em; }
+  .door .note a:hover, .door .note a:focus-visible { background: var(--ink); color: var(--orange); outline: none; }
+  .foot { background: var(--ink); color: var(--paper); }
+  .foot .cols { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 4vw; padding-block: 9vh 6vh; }
+  .foot h4 { margin: 0 0 14px; font: var(--mono); font-size: 11px; text-transform: uppercase; color: var(--orange); }
+  .foot p, .foot li { font-size: 14px; line-height: 1.55; color: rgba(166,174,146,0.85); margin: 0 0 0.6em; }
+  .foot ul { list-style: none; margin: 0; padding: 0; }
+  .foot li b { color: var(--paper); font-weight: 600; }
+  .foot .brand { font: 400 44px/1 Anton, sans-serif; letter-spacing: 0.04em; color: var(--paper); margin: 0 0 12px; }
+  .foot a { text-decoration: underline; text-underline-offset: 3px; }
+  .foot a:hover, .foot a:focus-visible { color: var(--orange); outline: none; }
+  .foot .small { border-top: 1px solid rgba(166,174,146,0.25); padding-block: 22px 28px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font: var(--mono); font-size: 11px; text-transform: uppercase; color: rgba(166,174,146,0.7); }
+
+  @media (max-width: 1100px) {
+    .numbers { grid-template-columns: repeat(3, 1fr); row-gap: 5vh; }
+    .keyboard { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .foot .cols { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 760px) {
+    .tl > :nth-child(n+2), .tr > :first-child, .swoosh, .pct, .dimv, .bl, .br { display: none; }
+    .marquee .word { font-size: 26vh; }
+    .finale a { font-size: 17vw; }
+    .nav { gap: 0; padding-left: 10px; } .nav a:not(.go) { display: none; }
+    .features { display: flex; flex-direction: column; }
+    .screen-wrap { order: -1; top: 64px; height: auto; z-index: 3; padding-block: 8px; background: var(--paper); }
+    .step { min-height: 70vh; }
+    .compare .head, .plugins .head, .keys .head { grid-template-columns: 1fr; gap: 0; }
+    .numbers { grid-template-columns: repeat(2, 1fr); }
+    .keyboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .start .grid { grid-template-columns: 1fr; }
+    .foot .cols { grid-template-columns: 1fr; }
+    .door .note { flex-direction: column; gap: 12px; }
+  }
+</style>
+</head>
+<body>
+<h1 class="sr">BeatLab: a free beat studio that works the way FL Studio works</h1>
+
+<nav class="nav" id="nav" aria-label="Sections"><b>BEATLAB</b><a href="#features">Studio</a><a href="#layouts">Layouts</a><a href="#plugins">Plugins</a><a href="#start">Get it</a><a href="#faq">FAQ</a><a class="go" href="studio.html">Open studio →</a></nav>
+
+<section class="tape" id="tape" aria-label="Intro">
+<div class="stage" id="stage">
+  <canvas id="fx" aria-hidden="true"></canvas>
+  <div class="marquee" id="marquee" aria-hidden="true"><canvas id="strip"></canvas><span class="word" id="word">Unleash the beat&nbsp; unleash the beat&nbsp;</span></div>
+  <canvas id="gl" aria-hidden="true"></canvas>
+  <div id="callouts" aria-hidden="true"></div>
+  <svg id="frame" aria-hidden="true"></svg>
+
+  <div class="hud tl"><span>Beat studio<br>BL-S 087</span><svg class="glyph" width="44" height="30" viewBox="0 0 44 30" aria-hidden="true"><g fill="none" stroke="#171A12" stroke-width="2.4"><circle cx="8" cy="8" r="5.5"/><circle cx="22" cy="8" r="5.5"/><circle cx="36" cy="8" r="5.5"/><circle cx="12" cy="22" r="5.5"/><circle cx="34" cy="22" r="5.5"/></g><g stroke="#171A12" stroke-width="2.4"><path d="M4 8h8M18 4l8 8M32 8h8M8 26l8-8M30 22h8"/></g><rect x="17" y="19" width="10" height="6" rx="2" fill="#171A12"/></svg><span class="dot" id="rec-dot">Record start</span></div>
+  <div class="swoosh l" aria-hidden="true"><svg viewBox="0 0 90 40"><path d="M2 20 C 20 4, 55 6, 88 17 C 60 15, 34 17, 22 21 C 40 24, 62 26, 88 25 C 55 34, 20 36, 2 20 Z" fill="#171A12"/></svg></div>
+  <a class="logo" href="studio.html" aria-label="BeatLab, open the studio"><svg viewBox="0 0 260 64" aria-hidden="true">
+    <ellipse cx="130" cy="34" rx="120" ry="17" fill="none" stroke="#171A12" stroke-width="3" transform="rotate(-6 130 34)"/>
+    <text x="130" y="45" text-anchor="middle" font-family="Anton, sans-serif" font-size="40" letter-spacing="3" fill="#A6AE92" stroke="#171A12" stroke-width="9" paint-order="stroke" stroke-linejoin="round">BEATLAB</text>
+    <path d="M20 12l2.4 5.6 5.6 2.4-5.6 2.4-2.4 5.6-2.4-5.6-5.6-2.4 5.6-2.4z M238 40l2 4.6 4.6 2-4.6 2-2 4.6-2-4.6-4.6-2 4.6-2z" fill="#171A12"/>
+    <circle cx="30" cy="54" r="3" fill="#171A12"/><circle cx="226" cy="10" r="3" fill="#171A12"/></svg></a>
+  <div class="swoosh r" aria-hidden="true"><svg viewBox="0 0 90 40"><path d="M2 20 C 20 4, 55 6, 88 17 C 60 15, 34 17, 22 21 C 40 24, 62 26, 88 25 C 55 34, 20 36, 2 20 Z" fill="#171A12"/></svg></div>
+  <div class="hud tr"><span>Beat studio for Windows<svg class="glyph" width="40" height="14" viewBox="0 0 40 14" aria-hidden="true"><g fill="none" stroke="#171A12" stroke-width="2.4"><circle cx="7" cy="7" r="5"/><circle cx="20" cy="7" r="5"/><circle cx="33" cy="7" r="5"/></g><path d="M4 7h6M20 4v6M30 4l6 6" stroke="#171A12" stroke-width="2.2"/></svg></span><a href="studio.html">Open studio</a></div>
+  <div class="hud bl"><span class="box" id="bl-box">BL1</span><span class="lines">KIKA - 00 NMB 00087 &nbsp;&nbsp; 2026 &nbsp;&nbsp; LOCAL · NO CLOUD · NO SUBSCRIPTION<br>Identification number - 0874140FMKIKA087 16</span></div>
+  <div class="hud br" id="counter">000000003214</div>
+  <span class="pct l" id="pct-l" aria-hidden="true">000%</span>
+  <span class="pct r" id="pct-r" aria-hidden="true">000%</span>
+  <span class="dimv" id="dim-tl" aria-hidden="true"></span><span class="dimv" id="dim-tlv" aria-hidden="true"></span>
+  <span class="dimv" id="dim-tr" aria-hidden="true"></span><span class="dimv" id="dim-trv" aria-hidden="true"></span>
+  <span class="strip-label" id="strip-label" aria-hidden="true">Fast, local, free</span>
+  <p class="lede" id="lede"><b>A free beat studio that runs on your computer.</b><br>It works the way FL Studio works, and it writes ideas with you.</p>
+  <div class="tag" id="tag"><b id="tag-time">00:00:00</b><i>REC</i><small>A trap beat BeatLab just wrote and rendered, here in your browser</small><button id="hear" disabled><span>wav ◉ 44.1k</span><b>▶</b></button></div>
+  <div class="unpacked" id="unpacked"><p>Unpacked</p><h2>Five windows. One studio.</h2></div>
+  <a class="tab" id="tab" href="studio.html">—— Open studio ——</a>
+  <span class="hint" id="hint">Scroll</span>
+  <div class="loading" id="loading">Loading 000%</div>
+</div>
+</section>
+
+<main class="page">
+  <section class="manifesto wrap" id="about">
+    <p class="kick rise">What BeatLab is</p>
+    <p class="big" id="manifesto">BeatLab is a beat studio for people who make beats. Patterns, a playlist, a piano roll you can play and a full mixer, laid out <em>the way FL Studio taught your hands.</em> It writes ideas with you, it runs <em>on your own computer,</em> and it will never ask you for <em>a subscription.</em></p>
+  </section>
+
+  <section class="features wrap" id="features" aria-label="The studio">
+    <div class="steps">
+      <article class="step" data-i="0">
+        <p class="kick">01 · Playlist</p>
+        <h2>Paint the song.</h2>
+        <p>Numbered patterns go onto a free playlist as clips, right next to your audio. Draw, paint, delete, mute, slice and select, with snap, zoom and markers. Shift-drag a copy, right-click to delete.</p>
+        <ul class="chips"><li>Draw<kbd>P</kbd></li><li>Paint<kbd>B</kbd></li><li>Delete<kbd>D</kbd></li><li>Mute<kbd>T</kbd></li><li>Slice<kbd>C</kbd></li><li>Select<kbd>E</kbd></li></ul>
+      </article>
+      <article class="step" data-i="1">
+        <p class="kick">02 · Piano roll</p>
+        <h2>Play it in.</h2>
+        <p>Click a key and it plays. Stamp chords, lock to the key, quantize, legato, and shape velocity by drawing. Record from your computer keyboard or a MIDI controller with a count-in.</p>
+        <ul class="chips"><li>Chord stamps</li><li>Scale snap</li><li>Quantize<kbd>Ctrl Q</kbd></li><li>Legato<kbd>Ctrl L</kbd></li></ul>
+      </article>
+      <article class="step" data-i="2">
+        <p class="kick">03 · The brain</p>
+        <h2>Start from a spark.</h2>
+        <p>Pick one of twelve styles and press Make a beat: drums, 808, chords and melody, written in a moment and kept in patterns you can edit. Switch on AI melody and AI drums and a small model runs right in your browser. No account, no bill.</p>
+        <ul class="chips"><li>12 styles</li><li>Energy and complexity</li><li>AI melody</li><li>AI drums</li></ul>
+      </article>
+      <article class="step" data-i="3">
+        <p class="kick">04 · Mixer</p>
+        <h2>Mix it properly.</h2>
+        <p>Every channel gets an insert with pan, reverb and delay sends, and a chain of effects you can bypass and reorder: EQ, compression, drive, tape, delay, reverb and more. Duck anything to the kick in one turn.</p>
+        <ul class="chips"><li>14 effects</li><li>Sidechain duck</li><li>Sends</li><li>Bypass and reorder</li></ul>
+      </article>
+      <article class="step" data-i="4">
+        <p class="kick">05 · Master</p>
+        <h2>Finish it.</h2>
+        <p>A master chain with glue, width and a ceiling, a tilted spectrum and true LUFS meters with targets for Spotify and Apple Music. Then export WAV, MP3, stems or MIDI and carry on in FL Studio.</p>
+        <ul class="chips"><li>LUFS</li><li>WAV and MP3</li><li>Stems</li><li>MIDI</li></ul>
+      </article>
+    </div>
+    <div class="screen-wrap" aria-hidden="true">
+      <div>
+        <div class="screen window-in" id="screen">
+          <div class="media on" data-i="0"><video muted loop playsinline preload="metadata" poster="media/playlist-poster.webp" src="media/playlist.mp4"></video></div>
+          <div class="media" data-i="1"><video muted loop playsinline preload="none" poster="media/roll-poster.webp" src="media/roll.mp4"></video></div>
+          <div class="media" data-i="2"><video muted loop playsinline preload="none" poster="media/make-poster.webp" src="media/make.mp4"></video></div>
+          <div class="media" data-i="3"><img loading="lazy" src="media/win-mixer.webp" alt=""></div>
+          <div class="media" data-i="4"><img loading="lazy" src="media/win-master.webp" alt=""><img class="float" loading="lazy" src="media/export.webp" alt=""></div>
+          <div class="screen-tab"><span id="screen-n">01 / 05</span><b id="screen-name">Playlist</b></div>
+        </div>
+        <div class="screen-cap"><span>Recorded in BeatLab</span><span id="screen-what">Painting the hook along a track</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="compare wrap" id="layouts">
+    <div class="head">
+      <div><p class="kick rise">Two ways to work</p><h2 class="rise">Rig or DAW.<br>Switch any time.</h2></div>
+      <p class="rise">Rig puts one big screen above the hardware: pads, the brain and a turntable you can scratch. DAW gives you floating, resizable windows over the playlist, like the studio you already know. Drag the line to compare.</p>
+    </div>
+    <div class="cmp window-in" id="cmp">
+      <img src="media/daw.webp" alt="BeatLab in the DAW layout: a browser on the left, the playlist, and the channel rack and piano roll as floating windows" loading="lazy">
+      <img class="top" src="media/rig.webp" alt="BeatLab in the Rig layout: the playlist on one big screen above the brain, the pads and the turntable" loading="lazy">
+      <span class="handle"></span><span class="lbl l">Rig</span><span class="lbl r">DAW</span>
+      <input type="range" min="0" max="100" value="50" id="cmp-x" aria-label="Compare the Rig and DAW layouts">
+    </div>
+  </section>
+
+  <div class="band" aria-label="Twelve styles: trap, drill, R&amp;B, lofi, boom bap, afrobeats, amapiano, house, reggaeton, phonk, pop and desi hip-hop"><div class="band-row" id="band" aria-hidden="true"></div></div>
+
+  <section class="plugins" id="plugins">
+    <div class="pin">
+      <div class="wrap head">
+        <div><p class="kick">Built in, free</p><h2>Its own instruments<br>and effects.</h2></div>
+        <p>Original BeatLab plugins on every channel, nothing to buy. Your FL Studio plugins stay in FL: send them BeatLab's MIDI and stems and keep going.</p>
+      </div>
+      <div class="track" id="track"></div>
+    </div>
+  </section>
+
+  <section class="numbers wrap" aria-label="BeatLab in numbers">
+    <div class="num rise"><b data-to="0">0</b><span>Subscriptions</span></div>
+    <div class="num rise"><b data-to="0">0</b><span>Accounts</span></div>
+    <div class="num rise"><b data-to="12">12</b><span>Styles</span></div>
+    <div class="num rise"><b data-to="14">14</b><span>Effects</span></div>
+    <div class="num rise"><b data-to="1">1</b><span>Press to a full beat</span></div>
+  </section>
+
+  <section class="keys wrap" id="keys">
+    <div class="head">
+      <div><p class="kick rise">Shortcuts</p><h2 class="rise">Your hands<br>already know it.</h2></div>
+      <p class="rise">The FL Studio keys work here: function keys for the windows, letters for the tools, and Ctrl+K finds any action by name. Press F1 in the studio to see every one.</p>
+    </div>
+    <div class="keyboard" id="keyboard">
+      <div class="key"><kbd>F5</kbd><span>Playlist</span></div>
+      <div class="key"><kbd>F6</kbd><span>Channel rack</span></div>
+      <div class="key"><kbd>F7</kbd><span>Piano roll</span></div>
+      <div class="key"><kbd>F9</kbd><span>Mixer</span></div>
+      <div class="key"><kbd>Space</kbd><span>Play or stop</span></div>
+      <div class="key"><kbd>L</kbd><span>Pattern or song</span></div>
+      <div class="key"><kbd>R</kbd><span>Record</span></div>
+      <div class="key"><kbd>F4</kbd><span>New pattern</span></div>
+      <div class="key"><kbd>Ctrl B</kbd><span>Duplicate</span></div>
+      <div class="key"><kbd>Ctrl K</kbd><span>Find any action</span></div>
+    </div>
+  </section>
+
+  <section class="start wrap" id="start">
+    <p class="kick rise">Get it</p>
+    <h2 class="rise">Start in a minute.</h2>
+    <div class="grid">
+      <div class="s rise"><b>1</b><h3>Get BeatLab</h3><p>Download it from GitHub, unzip it and double-click Install BeatLab. Or press Open the studio to use it right here in your browser.</p></div>
+      <div class="s rise"><b>2</b><h3>Double-click BeatLab</h3><p>The shortcut on your Desktop opens it in Chrome or Edge. There's nothing to sign up for and nothing to pay.</p></div>
+      <div class="s rise"><b>3</b><h3>Press Make a beat</h3><p>Or open an empty pattern and play the keys. Everything saves as you go.</p></div>
+    </div>
+    <div class="row rise"><a class="btn fill" href="studio.html">Open the studio →</a><small>Windows · Chrome or Edge · free</small></div>
+  </section>
+
+  <section class="faq wrap" id="faq">
+    <div class="head"><p class="kick rise">Questions</p><h2 class="rise">Good to know.</h2></div>
+    <details><summary>Is BeatLab really free?</summary><p>Yes. No subscription, no account and no ads. The AI runs on your own computer, so there's no bill to pass on to you.</p></details>
+    <details><summary>Does it replace FL Studio?</summary><p>It works the way FL Studio works, so you can sketch, arrange and mix without relearning anything. When you want your FL plugins, export MIDI, stems or WAV and carry on in FL. BeatLab isn't made by or connected to Image-Line.</p></details>
+    <details><summary>Do I need the internet?</summary><p>Only to load the app the first time and, if you switch them on, the AI models. Your beats never leave your computer.</p></details>
+    <details><summary>Where are my beats saved?</summary><p>In your browser's storage on this computer, saved as you work, with named versions you can go back to. Save a project file any time to back a beat up or move it to another computer.</p></details>
+    <details><summary>Can I use my own samples?</summary><p>Yes. Drop a WAV or MP3 onto any channel or straight onto the playlist. If FL Studio is installed, BeatLab can play its sample packs too.</p></details>
+    <details><summary>What do I need?</summary><p>Windows and Chrome or Edge. A MIDI keyboard and a microphone work if you have them, and the computer keyboard plays notes if you don't.</p></details>
+  </section>
+</main>
+
+<footer class="end">
+  <section class="door" id="door" aria-label="Open the studio">
+    <div class="pin">
+      <div class="orange" id="orange"></div>
+      <canvas id="finbars" aria-hidden="true"></canvas>
+      <div class="finale" id="finale"><a href="studio.html">Open studio</a><svg viewBox="0 0 60 240" fill="none" stroke="#171A12" stroke-width="7" stroke-linecap="round" aria-hidden="true"><path id="coil"/><circle cx="30" cy="226" r="11" fill="#171A12" stroke="none"/></svg><a href="studio.html" tabindex="-1">Open studio</a></div>
+      <div class="note" id="note"><span>Pick a style · press make a beat · export to FL Studio</span><a href="studio.html">Start making beats →</a></div>
+    </div>
+  </section>
+  <div class="foot">
+    <div class="wrap cols">
+      <div><p class="brand">BEATLAB</p><p>A free beat studio that runs on your computer and works the way FL Studio works.</p><p><a href="studio.html">Open the studio</a></p></div>
+      <div id="changelog"><h4>Changelog</h4><ul>
+        <li><b>28 October 2026</b> FL-style workspace: numbered patterns, a free playlist with pattern and audio clips, the six tools, Rig and DAW layouts and FL's shortcuts.</li>
+        <li><b>Before that</b> Mixer with 14 effects, master chain, LUFS meters, and WAV, MP3, stem and MIDI export.</li>
+        <li><b>Before that</b> Make a beat in 12 styles, with AI melody and AI drums.</li>
+      </ul></div>
+      <div id="privacy"><h4>Privacy</h4><p>No accounts and no analytics. Your projects, recordings and settings stay in this browser on this computer. The app loads its code, fonts and, if you switch them on, AI models from public servers (jsDelivr, Google Fonts, Google Cloud Storage), and none of those requests carry your music.</p></div>
+      <div id="credits"><h4>Credits</h4><ul>
+        <li>Three.js, MIT</li><li>Magenta.js, Apache 2.0</li><li>lamejs, LGPL 3.0</li><li>Anton, Space Grotesk, IBM Plex Mono, Geist and DSEG fonts, SIL Open Font License</li>
+      </ul></div>
+    </div>
+    <div class="wrap small"><span>© 2026 KIKA · BeatLab</span><span>FL Studio is a trademark of Image-Line. BeatLab isn't affiliated with Image-Line.</span></div>
+  </div>
+</footer>
+
+<div class="grain" aria-hidden="true"></div>
+<script type="module" src="landing.js"></script>
+</body>
+</html>

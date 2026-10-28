@@ -1,0 +1,8 @@
+# beats you export and old script output stay on your computer
+exports/
+rnb_*/
+trap_*/
+screenshots/
+__pycache__/
+node_modules/
+.claude/
