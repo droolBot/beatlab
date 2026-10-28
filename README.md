@@ -81,7 +81,7 @@ That re-renders BeatLab's own sample library from its synths, into `beatlab/samp
 | `beatlab/deliver.js` | Loudness, limiter, WAV, MP3, MIDI, zip |
 | `beatlab/index.html`, `landing.js` | The landing page |
 
-The plan and what's done are in [ROADMAP.md](ROADMAP.md).
+
 
 ## Credits
 
