@@ -34,11 +34,11 @@ export const SOUNDS = {
   kick: 'Kick', snare: 'Snare', clap: 'Clap', hat: 'Closed hat', openhat: 'Open hat', rim: 'Rim', shaker: 'Shaker',
   conga: 'Conga', tom: 'Dhol', tabla: 'Tabla', cowbell: 'Cowbell', 808: '808', bass: 'Sub bass', reese: 'Reese bass', logdrum: 'Log drum',
   keys: 'Electric piano', piano: 'Piano', organ: 'Organ', pad: 'Pad', strings: 'Strings', guitar: 'Guitar', sitar: 'Sitar', pluck: 'Pluck',
-  bell: 'Bell', flute: 'Flute', lead: 'Synth lead', vox: 'Vocal synth', brass: 'Brass', synth: 'Trio synth', fm: 'FM synth', wave: 'Wavetable', slicer: 'Slicer', vinyl: 'Vinyl crackle', fx: 'Risers and impacts',
+  bell: 'Bell', flute: 'Flute', lead: 'Synth lead', vox: 'Vocal synth', brass: 'Brass', synth: 'Trio synth', acid: 'Acid bass', fm: 'FM synth', wave: 'Wavetable', slicer: 'Slicer', vinyl: 'Vinyl crackle', fx: 'Risers and impacts',
 };
 export const SOUNDS_FOR = {
   drum: ['kick', 'snare', 'clap', 'hat', 'openhat', 'rim', 'shaker', 'conga', 'tom', 'tabla', 'cowbell', 'slicer'],
-  bass: ['808', 'bass', 'reese', 'logdrum', 'synth', 'fm', 'wave'],
+  bass: ['808', 'bass', 'reese', 'acid', 'logdrum', 'synth', 'fm', 'wave'],
   chords: ['keys', 'piano', 'organ', 'pad', 'strings', 'guitar', 'pluck', 'bell', 'vox', 'brass', 'synth', 'fm', 'wave'],
   melody: ['bell', 'pluck', 'flute', 'lead', 'keys', 'piano', 'organ', 'guitar', 'sitar', 'strings', 'vox', 'brass', 'cowbell', 'synth', 'fm', 'wave'],
   texture: ['vinyl'],

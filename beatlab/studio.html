@@ -419,6 +419,11 @@
   .tree li:hover { background: var(--line); }
   .tree li .icon { color: var(--subtle); }
   .tree li.folder { color: var(--muted); }
+  .tree li .star { margin-left: auto; opacity: 0; width: 24px; height: 24px; }
+  .tree li:hover .star, .tree li .star:focus-visible { opacity: 0.6; }
+  .tree li .star[aria-pressed="true"] { opacity: 1; color: var(--accent); }
+  .tree li .star[aria-pressed="true"] svg { fill: currentColor; }
+  .tree li .star .icon { color: inherit; }
   .tree li.folder .icon.f { color: var(--accent); }
   .tree li .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .tree li small { color: var(--subtle); font-variant-numeric: tabular-nums; }

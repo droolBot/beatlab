@@ -1,6 +1,17 @@
 // BeatLab sound: instrument plugins with knobs, mixer strips with insert effects and sidechain,
-// live playback, offline rendering and WAV files. Web Audio only.
-import { PPQ, STEP, arrange, rng } from './music.js';
+// live playback, offline rendering and WAV files. Web Audio, plus an AudioWorklet for the effects that
+// work sample by sample (dsp.js).
+import { PPQ, STEP, arrange, rng, songScale } from './music.js';
+import { maskOf } from './dsp.js';
+
+// The audio-thread effects load once per audio context. Until they have, a new one passes sound through.
+const DSP = new WeakMap(), DSP_READY = new WeakSet();
+export const loadDsp = c => {
+  if (!DSP.has(c)) DSP.set(c, c.audioWorklet.addModule(new URL('./dsp-worklet.js', import.meta.url)).then(() => { DSP_READY.add(c); }));
+  return DSP.get(c);
+};
+const DSP_FX = { warp: 'beatlab-warp', pitch: 'beatlab-pitch', tune: 'beatlab-tune', transient: 'beatlab-transient' };
+const SCALE_PCS = [[0, 2, 4, 5, 7, 9, 11], [0, 2, 3, 5, 7, 8, 10], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]];
 
 const mtof = p => 440 * 2 ** ((p - 69) / 12);
 const shape = fn => Float32Array.from({ length: 2049 }, (_, i) => fn(i / 1024 - 1));
@@ -28,6 +39,7 @@ export const PARAMS = {
   tom: [['tune', 'Tune', -12, 12, 0], ['decay', 'Decay', 0.1, 0.8, 0.38]],
   tabla: [['tune', 'Tune', -12, 12, 0], ['bend', 'Bend', 0, 1, 0.5]],
   cowbell: [['decay', 'Decay', 0.1, 1, 0.35], ['tone', 'Tone', 1, 3, 1.7]],
+  acid: [['wave', 'Wave', 0, 1, 0, ['Saw', 'Square']], ['cutoff', 'Cutoff', 60, 3000, 320], ['res', 'Resonance', 1, 25, 14], ['env', 'Env mod', 0, 1, 0.6], ['decay', 'Decay', 0.05, 1.5, 0.28], ['accent', 'Accent', 0, 1, 0.7], ['drive', 'Drive', 0, 1, 0.35]],
   808: [['decay', 'Decay', 0.2, 3, 1.2], ['drive', 'Drive', 0, 1, 0.45], ['glide', 'Glide', 0.01, 0.3, 0.08], ['tone', 'Tone', 200, 4000, 1000]],
   bass: [['cutoff', 'Cutoff', 100, 4000, 1200], ['res', 'Resonance', 0.5, 12, 3], ['decay', 'Decay', 0.05, 1, 0.25]],
   reese: [['cutoff', 'Cutoff', 100, 4000, 700], ['detune', 'Detune', 0, 40, 18], ['drive', 'Drive', 0, 1, 0.3]],
@@ -94,6 +106,10 @@ export const EFFECTS = {
   multiband: { name: 'Multiband', group: 'Dynamics', params: [['x1', 'Low split', 60, 600, 180], ['x2', 'High split', 1000, 9000, 3500], ['low', 'Low squash', 0, 1, 0.5], ['mid', 'Mid squash', 0, 1, 0.4], ['high', 'High squash', 0, 1, 0.4], ['out', 'Output', -6, 12, 2]] },
   gate: { name: 'Gate', group: 'Modulation', params: [['rate', 'Rate', 0, 4, 2], ['depth', 'Depth', 0, 1, 0.9], ['smooth', 'Smooth', 0, 1, 0.25]] },
   autopan: { name: 'Auto-pan', group: 'Modulation', params: [['rate', 'Rate', 0, 4, 3], ['depth', 'Depth', 0, 1, 0.6]] },
+  transient: { name: 'Transient shaper', group: 'Dynamics', params: [['attack', 'Attack', -1, 1, 0.5], ['sustain', 'Sustain', -1, 1, 0], ['out', 'Output', -12, 12, 0]] },
+  warp: { name: 'Time warp', group: 'Time', params: [['mode', 'Effect', 0, 4, 0], ['when', 'When', 0, 3, 1], ['mix', 'Mix', 0, 1, 1]] },
+  pitch: { name: 'Pitch shifter', group: 'Pitch', params: [['semis', 'Semitones', -12, 12, 0], ['fine', 'Fine', -50, 50, 0], ['mix', 'Mix', 0, 1, 1]] },
+  tune: { name: 'Tune', group: 'Pitch', params: [['key', 'Key', 0, 12, 0], ['scale', 'Scale', 0, 2, 0], ['speed', 'Retune speed', 0, 1, 0.1], ['mix', 'Amount', 0, 1, 1]] },
 };
 export const VOCODER_BANDS = [['8', 8], ['16', 16], ['24', 24]];
 export const GATE_TIMES = [['1/4', 1], ['1/8', 0.5], ['1/16', 0.25], ['1/32', 0.125], ['Dotted 1/8', 0.75]];  // in beats
@@ -249,6 +265,21 @@ const SYNTHS = {
     sub.connect(g);
     g.connect(out);
     run([saw, sub], t, end + 0.2);
+  },
+  acid(e, out, t, p, d, a, n, P) {  // a 303-style line: one oscillator into a squelchy resonant filter; loud notes accent, tied notes slide
+    const c = e.ctx, f = mtof(p), acc = a > 0.8 ? P.accent : 0, slide = n.g && n.from != null, end = t + Math.max(0.05, d);
+    const o = osc(c, P.wave >= 0.5 ? 'square' : 'sawtooth', slide ? mtof(n.from) : f, t), lp = filter(c, 'lowpass', P.cutoff, P.res * (1 + acc * 0.5)), sh = c.createWaveShaper(), g = c.createGain();
+    if (slide) o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+    const top = Math.min(16000, P.cutoff * (1 + P.env * 10 * (1 + acc)));
+    lp.frequency.setValueAtTime(slide ? P.cutoff * (1 + P.env * 3) : top, t);
+    lp.frequency.exponentialRampToValueAtTime(P.cutoff, t + P.decay * (acc ? 0.6 : 1));
+    sh.curve = drive(P.drive);
+    const lvl = a * 0.32 * (1 + acc * 0.4);
+    g.gain.setValueAtTime(slide ? lvl : 0.0001, t);
+    if (!slide) g.gain.exponentialRampToValueAtTime(lvl, t + 0.003);
+    g.gain.setTargetAtTime(0.0001, end, 0.012);
+    o.connect(lp).connect(sh).connect(g).connect(out);
+    run([o], t, end + 0.1);
   },
   reese(e, out, t, p, d, a, n, P) {  // two detuned saws: the dark drill and drum-and-bass bass
     const c = e.ctx, f = mtof(p), lp = filter(c, 'lowpass', P.cutoff, 1.5), sh = c.createWaveShaper(), g = attack(c, t, 0.01, a * 0.32), end = t + Math.max(0.1, d);
@@ -746,13 +777,24 @@ function makeEffect(c, fx) {
       dry.gain.value = 1 - P.mix;
     };
     unitMod = modIn;
+  } else if (DSP_FX[fx.type]) {  // runs on the audio thread (dsp.js); knobs are AudioParams
+    let node = null, vals = { t0: 0 };
+    const apply = () => { if (node) for (const [k, v] of Object.entries(vals)) node.parameters.get(k)?.setValueAtTime(v, c.currentTime); };
+    const attach = () => { node = new AudioWorkletNode(c, DSP_FX[fx.type], { outputChannelCount: [2] }); input.disconnect(); input.connect(node).connect(output); apply(); };
+    if (DSP_READY.has(c)) attach(); else { input.connect(output); loadDsp(c).then(attach, () => { /* no AudioWorklet: the sound passes through */ }); }
+    set = (P, bpm, keyMask) => {
+      vals = { ...vals, ...P, bpm };
+      if (fx.type === 'tune') vals.mask = Math.round(P.key) ? maskOf(SCALE_PCS[Math.round(P.scale)].map(i => Math.round(P.key) - 1 + i)) : keyMask;
+      apply();
+    };
+    sync = t => { vals.t0 = t; apply(); };
   } else {  // compressor
     const comp = c.createDynamicsCompressor(), makeup = gain(c, 1);
     comp.release.value = 0.15;
     input.connect(comp).connect(makeup).connect(output);
     set = P => { comp.threshold.value = P.threshold; comp.ratio.value = P.ratio; comp.attack.value = P.attack; makeup.gain.value = 10 ** (P.gain / 20); };
   }
-  return { input, output, sync, filters: unitFilters, mod: unitMod, set: (own, bpm) => set(Object.fromEntries(EFFECTS[fx.type].params.map(([id, , , , def]) => [id, own[id] ?? def])), bpm) };
+  return { input, output, sync, filters: unitFilters, mod: unitMod, set: (own, bpm, keyMask) => set(Object.fromEntries(EFFECTS[fx.type].params.map(([id, , , , def]) => [id, own[id] ?? def])), bpm, keyMask) };
 }
 
 // A reversed copy of a buffer, for clips played backwards
@@ -795,6 +837,8 @@ export class Engine {
     this.crackle = crackleBuffer(c);
     this.strips = new Map();
     this.ks = new Map();
+    this.keyMask = 4095;  // the song's scale, for Tune
+    loadDsp(c).catch(() => { /* older browsers: those effects pass sound through */ });
     this.open = [];  // ringing open hats, cut off by the next closed hat
   }
 
@@ -802,6 +846,12 @@ export class Engine {
     this.bpm = bpm;
     this.delay.delayTime.value = 0.75 * 60 / bpm;  // dotted 8th echoes
     for (const s of this.strips.values()) this.setEffects(s, s.list ?? [], true);  // tempo-synced delays follow
+  }
+  setKey(pcs) {
+    const m = maskOf(pcs);
+    if (m === this.keyMask) return;
+    this.keyMask = m;
+    for (const s of this.strips.values()) this.setEffects(s, s.list ?? [], true);
   }
   setDusty(on) { this.tone.frequency.value = on ? 6500 : 20000; }
   setMaster(v) { this.out.gain.value = 0.9 * v; }
@@ -845,7 +895,7 @@ export class Engine {
     s.list = list;
     on.forEach((f, i) => {
       const u = s.chain[i];
-      u.set(f, this.bpm);
+      u.set(f, this.bpm, this.keyMask);
       if (u.mod && u.source !== f.source) {  // the voice that shapes it: another channel, after its fader
         if (u.source) this.strips.get(u.source)?.pan.disconnect(u.mod);
         if (f.source && this.strip(f.source) !== s) this.strip(f.source).pan.connect(u.mod);
@@ -1144,6 +1194,7 @@ export class Player {
     for (const { track, notes } of a.events) for (const n of notes) this.buckets[Math.min(steps - 1, Math.floor(n.t / STEP))].push([track, n]);
     this.clips = view === 'song' ? audioClips(song).map(c => ({ track: song.tracks.find(t => t.id === c.ch), c, buffer: audio.get(c.buf) })).filter(x => x.track && x.buffer) : [];
     this.e.setTempo(song.bpm);
+    this.e.setKey(songScale(song));
     this.e.setDusty(dusty);
     this.e.mix(song.tracks);
     if (this.playing) this.laneSchedule(this.position());
@@ -1222,9 +1273,12 @@ export class Player {
 export async function render(song, view, dusty, only = null, opts = {}) {
   const { sr = 44100, audio = new Map(), dry = false, mute = [], master, level = 1 } = opts;
   const a = arrange(song, view), spt = 60 / (song.bpm * PPQ), secs = a.length * spt + 3, chunk = 2;
-  const ctx = new OfflineAudioContext(2, Math.ceil(secs * sr), sr), e = new Engine(ctx);
+  const ctx = new OfflineAudioContext(2, Math.ceil(secs * sr), sr);
+  await loadDsp(ctx).catch(() => {});
+  const e = new Engine(ctx);
   const tracks = song.tracks.map(t => (mute.includes(t.id) ? { ...t, mute: true } : t));
   e.setTempo(song.bpm);
+  e.setKey(songScale(song));
   e.setDusty(dusty);
   e.setMaster(level);
   if (master) e.setMasterChain(master);

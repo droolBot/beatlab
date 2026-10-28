@@ -27,6 +27,12 @@ export const PRESETS = {
   lead: { Saw: { cutoff: 4000, detune: 14, vibrato: 10, glide: 0 }, Soft: { cutoff: 1600, detune: 6, vibrato: 6, glide: 0 }, Glide: { cutoff: 3200, detune: 18, vibrato: 14, glide: 0.12 }, Screamer: { cutoff: 7500, detune: 30, vibrato: 25, glide: 0.05 } },
   brass: { Stab: { bright: 0.9, attack: 0.02 }, Swell: { bright: 0.5, attack: 0.25 }, Mellow: { bright: 0.2, attack: 0.08 } },
   vox: { Ah: { vowel: 0, breath: 0.3 }, Oo: { vowel: 1, breath: 0.2 }, Breathy: { vowel: 0.4, breath: 0.9 } },
+  acid: {
+    Squelch: { wave: 0, cutoff: 320, res: 14, env: 0.6, decay: 0.28, accent: 0.7, drive: 0.35 },
+    Rubber: { wave: 1, cutoff: 220, res: 9, env: 0.4, decay: 0.45, accent: 0.5, drive: 0.2 },
+    Screamer: { wave: 0, cutoff: 500, res: 22, env: 0.9, decay: 0.18, accent: 1, drive: 0.8 },
+    'Deep sub': { wave: 1, cutoff: 140, res: 5, env: 0.25, decay: 0.6, accent: 0.3, drive: 0.1 },
+  },
   fm: {
     'Electric piano': { algo: 1, r1: 1, r2: 1, i2: 2.2, d2: 0.9, r3: 10, i3: 0.6, d3: 0.15, attack: 0.002, decay: 1.4, sustain: 0.2, release: 0.4 },
     'FM bass': { algo: 0, r1: 1, r2: 1, i2: 4, d2: 0.25, r3: 3, i3: 1.2, d3: 0.12, attack: 0.002, decay: 0.4, sustain: 0.8, release: 0.08 },

@@ -5,6 +5,7 @@ import {
   arrange, suggestStyles, noteName, songScale, trackName, notesFor, pickKit, COLORS, newTrack, songLength, patternOf, newPatternId, clipId, upgrade, PATTERN_COLORS, ROWS,
 } from './music.js';
 import { Engine, Player, PARAMS, EFFECTS, DELAY_TIMES, GATE_TIMES, PAN_TIMES, VOCODER_BANDS, paramsOf, render, LANES } from './sound.js';
+import { WARP_MODES, WARP_WHEN, KEYS, TUNE_SCALES } from './dsp.js';
 import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
 import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable } from './brain.js';
@@ -1906,7 +1907,7 @@ function setLayout(l) {
 // The browser down the left of the DAW layout: the plugin library, FL Studio's sounds and this project
 const GEN_INFO = {
   kick: 'Synth kick with tune, decay and punch', snare: 'Synth snare with snap', clap: 'Layered hand clap', hat: 'Closed hi-hat', openhat: 'Open hi-hat, choked by the closed one', rim: 'Rim shot', shaker: 'Shaker', conga: 'Tuned conga', tom: 'Tom', tabla: 'Tabla with pitch bend', cowbell: 'Two-tone cowbell',
-  808: '808 bass with drive, glide and tone', bass: 'Filtered synth bass', reese: 'Detuned Reese bass', logdrum: 'Amapiano log drum',
+  808: '808 bass with drive, glide and tone', acid: 'Acid bass: a squelchy resonant filter, accents on loud notes, slides on tied ones', bass: 'Filtered synth bass', reese: 'Detuned Reese bass', logdrum: 'Amapiano log drum',
   keys: 'Electric piano with tine and tremolo', piano: 'Acoustic-style piano', organ: 'Drawbar organ with Leslie', pad: 'Warm detuned pad', strings: 'String ensemble with vibrato', guitar: 'Plucked nylon guitar', pluck: 'Bright plucked synth', bell: 'FM bell', vox: 'Vowel choir', brass: 'Brass section',
   flute: 'Breathy flute', lead: 'Detuned lead with glide', sitar: 'Buzzing sitar', synth: 'Three oscillators, unison, filter envelope and LFO', fm: 'Three FM operators: electric pianos, bells, basses, brass', wave: 'Morphing wavetables scanned by an envelope and an LFO', slicer: 'Chops a dropped loop into slices you rearrange on the steps', vinyl: 'Vinyl crackle bed', fx: 'Risers and impacts',
 };
@@ -1920,37 +1921,31 @@ function renderBrowser() {
   const q = ($('#browser-q')?.value ?? '').trim().toLowerCase(), hit = s => !q || s.toLowerCase().includes(q);
   const item = (label, sub, ic, onclick, title, extra) => h('li', { title: title ?? sub, onclick }, icon(ic, 14), h('span', { class: 'nm' }, label, h('small', {}, `  ${sub}`)), extra);
   if (tab === 'plugins') {
-    const sel = track(ui.selected), rows = [];
+    // Every entry is [folder, key, make]; starred keys also show in Favourites at the top
+    const sel = track(ui.selected), entries = [], favs = new Set(ui.favs ?? []);
+    const star = key => h('button', { class: 'iconbtn star', 'aria-pressed': favs.has(key), 'aria-label': favs.has(key) ? 'Remove from favourites' : 'Add to favourites', title: favs.has(key) ? 'Remove from favourites' : 'Add to favourites',
+      onclick: ev => { ev.stopPropagation(); ui.favs = favs.has(key) ? [...favs].filter(x => x !== key) : [...favs, key]; save(); renderBrowser(); } }, icon('star', 13));
+    const add = (folder, key, ...args) => entries.push([folder, key, () => item(...args, star(key))]);
     for (const [group, kind] of GEN_GROUPS) {
-      const list = SOUNDS_FOR[kind].filter(s => hit(`${SOUNDS[s]} ${GEN_INFO[s] ?? ''} ${group}`));
-      if (!list.length) continue;
-      rows.push(h('li', { class: 'folder' }, icon('folder', 14), h('span', { class: 'nm' }, `Instruments · ${group}`)));
-      for (const s of list) rows.push(item(SOUNDS[s], GEN_INFO[s] ?? '', 'knob', () => addChannel(kind, s), `${GEN_INFO[s] ?? SOUNDS[s]}. Click to add it as a new channel`));
+      for (const s of SOUNDS_FOR[kind].filter(s => hit(`${SOUNDS[s]} ${GEN_INFO[s] ?? ''} ${group}`))) add(`Instruments · ${group}`, `g:${kind}:${s}`, SOUNDS[s], GEN_INFO[s] ?? '', 'knob', () => addChannel(kind, s), `${GEN_INFO[s] ?? SOUNDS[s]}. Click to add it as a new channel`);
     }
     for (const group of [...new Set(flInst.map(i => i.group))]) {
-      const list = flInst.filter(i => i.group === group && hit(`${i.name} ${group} FL Studio`));
-      if (!list.length) continue;
-      rows.push(h('li', { class: 'folder' }, icon('folder', 14), h('span', { class: 'nm' }, `FL Studio · ${group}`)));
-      for (const i of list) rows.push(item(i.name, i.files.length > 1 ? `${i.files.length} samples` : 'one sample', 'piano', () => addFlChannel(i), `${i.name} from FL Studio's packs. Click to add it as a new channel`));
+      for (const i of flInst.filter(i => i.group === group && hit(`${i.name} ${group} FL Studio`))) add(`FL Studio · ${group}`, `i:${i.id}`, i.name, i.files.length > 1 ? `${i.files.length} samples` : 'one sample', 'piano', () => addFlChannel(i), `${i.name} from FL Studio's packs. Click to add it as a new channel`);
     }
-    const kits = flKit.filter(k => hit(`${k.name} drum kit`));
-    if (kits.length) {
-      rows.push(h('li', { class: 'folder' }, icon('folder', 14), h('span', { class: 'nm' }, 'FL Studio · Drum kits')));
-      for (const k of kits) rows.push(item(k.name, `${k.files.length} samples`, 'pads', () => loadKit(k), `Put the ${k.name} kit on your drum channels`));
-    }
+    for (const k of flKit.filter(k => hit(`${k.name} drum kit`))) add('FL Studio · Drum kits', `k:${k.id}`, k.name, `${k.files.length} samples`, 'pads', () => loadKit(k), `Put the ${k.name} kit on your drum channels`);
     for (const g of FX_GROUPS) {
-      const list = Object.entries(EFFECTS).filter(([, fx]) => fx.group === g && hit(`${fx.name} ${g} effect`));
-      if (!list.length) continue;
-      rows.push(h('li', { class: 'folder' }, icon('folder', 14), h('span', { class: 'nm' }, `Effects · ${g}`)));
-      for (const [k, fx] of list) rows.push(item(fx.name, fx.params.map(p => p[1].toLowerCase()).join(', '), 'mixer', () => {
+      for (const [k, fx] of Object.entries(EFFECTS).filter(([, fx]) => fx.group === g && hit(`${fx.name} ${g} effect`))) add(`Effects · ${g}`, `f:${k}`, fx.name, fx.params.map(p => p[1].toLowerCase()).join(', '), 'mixer', () => {
         if (!sel) return toast('Select a channel first.');
         if (sel.fx.length >= 8) return toast(`${trackName(sel)} already has 8 effects.`);
         sel.fx.push({ type: k });
         mixChanged();
         openPlugin(sel.id);
         renderView();
-      }, `Click to add ${fx.name} to ${sel ? trackName(sel) : 'the selected channel'}`));
+      }, `Click to add ${fx.name} to ${sel ? trackName(sel) : 'the selected channel'}`);
     }
+    const folder = label => h('li', { class: 'folder' }, icon(label === 'Favourites' ? 'star' : 'folder', 14), h('span', { class: 'nm' }, label));
+    const mine = entries.filter(([, key]) => favs.has(key)), rows = mine.length ? [folder('Favourites'), ...mine.map(([, , make]) => make())] : [];
+    entries.forEach(([f, , make], i) => { if (f !== entries[i - 1]?.[0]) rows.push(folder(f)); rows.push(make()); });
     body.replaceChildren(h('input', { id: 'browser-q', type: 'search', placeholder: 'Search instruments and effects', 'aria-label': 'Search plugins', value: q, oninput: () => { renderBrowser(); $('#browser-q').focus(); } }), h('ul', { class: 'tree one' }, rows));
     return;
   }
@@ -2687,7 +2682,7 @@ function renderPlugin() {
   floating(win, title);
   t.fx.forEach((fx, i) => { if (fx.type === 'peq') drawEq(win.querySelector(`canvas[data-eq="${i}"]`), fx); });
 }
-const FX_STEPS = { delay: { time: DELAY_TIMES }, gate: { rate: GATE_TIMES }, autopan: { rate: PAN_TIMES }, vocoder: { bands: VOCODER_BANDS } };
+const FX_STEPS = { delay: { time: DELAY_TIMES }, gate: { rate: GATE_TIMES }, autopan: { rate: PAN_TIMES }, vocoder: { bands: VOCODER_BANDS }, warp: { mode: WARP_MODES, when: WARP_WHEN }, tune: { key: KEYS, scale: TUNE_SCALES } };
 // The parametric EQ's response, worked out by the same filters the engine uses
 let eqCtx = null;
 function drawEq(cv, fx) {

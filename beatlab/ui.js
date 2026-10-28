@@ -35,6 +35,7 @@ const PATHS = {
   export: '<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>',
   search: '<circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L20 20"/>',
   folder: '<path d="M3.5 6.5h6l2 2h9v10a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1z"/>',
+  star: '<path d="M12 3.8l2.5 5.1 5.6.8-4 4 1 5.6-5.1-2.7-5.1 2.7 1-5.6-4-4 5.6-.8z"/>',
   wave: '<path d="M2 12c2 0 2-6 4-6s2 12 4 12 2-9 4-9 2 6 4 6 2-3 4-3"/>',
   flag: '<path d="M6 21V4M6 4h11l-2 4 2 4H6"/>',
   trash: '<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>',
