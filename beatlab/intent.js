@@ -5,6 +5,8 @@
 
 const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, ten: 10, twelve: 12, a: 1, an: 1 };
 const num = w => (w == null ? null : /^\d+(\.\d+)?$/.test(w) ? +w : NUM[w] ?? null);
+import { WARP_MODES, WARP_WHEN } from './dsp.js';
+
 const NOTE = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
 
 // Words for each part of the beat. Drums means every drum channel; the mix means everything.
@@ -21,7 +23,15 @@ const PARTS = [
   ['melody', /\b(melody|melodies|lead|hook melody|topline)\b/],
   ['texture', /\b(vinyl|crackle|texture)\b/],
   ['fx', /\b(fx|risers?|impacts?)\b/],
+  ['vocals', /\b(vocals?|vox|voice|singing|rap|recordings?)\b/],
   ['mix', /\b(mix|everything|whole (beat|song|track)|master|it all)\b/],
+];
+// When a Time warp acts, by its knob's positions: every bar, every 2nd bar, the last beat of the bar, the last bar of 4
+const WHEN = [
+  [1, /\bevery (2nd|second|other) bar|every 2 bars\b/],
+  [2, /\b(last beat|end of (each|every|the) bar|each bars end)\b/],
+  [3, /\b(last bar|every (4|four) bars|every (4th|fourth) bar|end of (the |every |each )?(phrase|section|4 bars))\b/],
+  [0, /\b(every bar|all the time|always|the whole (time|way)|throughout)\b/],
 ];
 const SECTIONS = ['intro', 'hook', 'chorus', 'verse 2', 'verse', 'bridge', 'outro'];
 const TONES = [
@@ -54,7 +64,7 @@ export function plan(input, ctx) {
     const section = sectionOf(t);
     const push = (type, o = {}) => steps.push({ type, ...o, ...(section ? { section } : {}) });
     let m;
-    if (/\b(stop|pause)\b/.test(t) && !/\bdrums? stop\b/.test(t)) push('stop');
+    if (/\b(stop|pause)\b/.test(t) && !/\b(drums? stop|tape ?stop)\b/.test(t)) push('stop');
     else if (/^ (play|start)( it| the beat| the song| playing)? $/.test(t) || /\bplay (the )?(beat|song|hook|it)\b/.test(t)) push('play');
     else if ((m = t.match(/\b(make|create|give me|start|cook up|new)\b.*?\b(trap|drill|r ?& ?b|rnb|lo-?fi|boom ?bap|afro(beats?)?|amapiano|house|reggaeton|phonk|pop|desi( hip-?hop)?)\b(?:.*?(\d{2,3}) ?(?:bpm)?)?/))) {
       const name = m[2].replace(/\s/g, '');
@@ -63,6 +73,22 @@ export function plan(input, ctx) {
     }
     else if ((m = t.match(/\b(\d{2,3}) ?bpm\b/) ?? t.match(/\btempo (?:to |at |of )?(\d{2,3})\b/))) push('tempo', { bpm: +m[1] });
     else if ((m = t.match(/\b(faster|speed (it )?up|slower|slow (it )?down)\b(?: by (\d+))?/))) push('tempoBy', { delta: (/faster|up/.test(m[1]) ? 1 : -1) * (+m[4] || 5) });
+    // Performance effects. "Half time" alone still halves the tempo; with a part or a when, it's the Time warp.
+    else if ((m = t.match(/\b(half[ -]?time|stutter(?:s|ing)?|tape ?stop|revers(?:e|ed|ing))\b/)) && (ps.length || WHEN.some(([, re]) => re.test(t)) || !/half/.test(m[1]))) {
+      const mode = /half/.test(m[1]) ? 0 : /stutter/.test(m[1]) ? (/\b(16(th)?s?|sixteenths?|fast(er)?)\b/.test(t) ? 2 : 1) : /tape/.test(m[1]) ? 3 : 4;
+      const when = WHEN.find(([, re]) => re.test(t))?.[0] ?? [1, 2, 2, 3, 2][mode];
+      push('fx', { parts: ps.length ? ps : ['mix'], fx: 'warp', set: { mode, when }, label: `${WARP_MODES[mode][0].toLowerCase()}, ${WARP_WHEN[when][0].toLowerCase()}` });
+    }
+    else if (/\b(auto-?tuned?|pitch[- ]correct(ion|ed)?|t-?pain)\b/.test(t) || /\btune (the |my )?(vocals?|vox|voice|singing|melody|lead|rap)\b/.test(t)) {
+      const hard = /\b(hard|robot(ic)?|heavy|t-?pain|strong|full)\b/.test(t);
+      push('fx', { parts: ps.length ? ps : ['vocals'], fx: 'tune', set: { speed: hard ? 0 : 0.12 }, label: hard ? 'hard and robotic' : 'natural' });
+    }
+    else if ((m = t.match(/\bpitch\b(?: [a-z0-9]+)*? (up|down)(?: by)?(?: (an octave|octave|a fifth|fifth|\d{1,2}))?/))) {
+      const amt = m[2] ?? 'octave', semis = Math.min(12, /octave/.test(amt) ? 12 : /fifth/.test(amt) ? 7 : +amt), signed = (m[1] === 'up' ? 1 : -1) * semis;
+      push('fx', { parts: ps.length ? ps : ['vocals'], fx: 'pitch', set: { semis: signed }, label: `${m[1]} ${semis === 12 ? 'an octave' : `${semis} semitone${semis === 1 ? '' : 's'}`}` });
+    }
+    else if (/\b(punch(ier|y)?|more attack|snappier|more snap|hit harder)\b/.test(t)) push('fx', { parts: ps.length ? ps : ['drums'], fx: 'transient', set: { attack: 0.8 }, label: 'more attack' });
+    else if (/\b(shorter|less|tighter) (tails?|ring(ing)?|boom|sustain)\b/.test(t)) push('fx', { parts: ps.length ? ps : ['drums'], fx: 'transient', set: { attack: 0, sustain: -0.7 }, label: 'shorter tail' });
     else if (/\bdouble[ -]time\b/.test(t)) push('tempoTimes', { f: 2 });
     else if (/\bhalf[ -]time\b/.test(t)) push('tempoTimes', { f: 0.5 });
     else if ((m = t.match(/\b(?:key|in)(?: of)? ([a-g])(#| ?sharp| ?flat|b)? ?(major|minor|maj|min|m)?\b/)) && (m[3] || /\bkey\b/.test(t))) {
@@ -82,6 +108,7 @@ export function plan(input, ctx) {
     else if (/\b(vary|variation|switch up|change up|remix)\b/.test(t)) push('ai', { what: ps.some(p => ['melody', 'chords', 'arp', 'bass'].includes(p)) ? 'vary-melody' : 'vary-drums' });
     else if ((m = t.match(/\b(808|bass)? ?(slides?|glides?)\b(?:.*?every (\w+) bars?)?/)) && m[2]) push('slides', { every: num(m[3]) ?? 2 });
     else if ((m = t.match(/\b(hat|hi-?hat)? ?(rolls?|ratchets?|triplets)\b(?:.*?every (\w+) bars?)?/)) && m[2] && /hat|roll/.test(t)) push('hatRolls', { every: num(m[3]) ?? 2 });
+    else if (/\b(check|diagnose|doctor|review|rate|whats wrong|what is wrong|feedback|how does (it|this|my \w+) sound)\b/.test(t) && /\b(mix|beat|song|track|it|this|doctor)\b/.test(t)) push('doctor');
     else if (/\b(auto[ -]?mix|mix it|balance|level (it|the mix)|fix the mix|mixdown)\b/.test(t)) push('automix');
     else if ((m = t.match(/\bexport\b.*?\b(mp3|wav|stems?|midi)?\b/)) && /\bexport\b/.test(t)) push('export', { fmt: /mp3/.test(t) ? 'mp3' : /stem/.test(t) ? 'stems' : /midi/.test(t) ? 'midi' : 'wav' });
     else if ((m = t.match(/\b(new|different|another|change the|rewrite( the)?|regenerate( the)?|redo( the)?)\b.*?\b(drums?|chords?|bass(line)?|808|melody|lead)\b/))) {
@@ -155,6 +182,7 @@ export function describe(step, names = {}) {
     case 'slides': return `Add 808 slides every ${step.every} bar${step.every === 1 ? '' : 's'}${where}`;
     case 'hatRolls': return `Add hi-hat rolls every ${step.every} bar${step.every === 1 ? '' : 's'}${where}`;
     case 'automix': return 'Balance the mix';
+    case 'doctor': return 'Check the mix with the mix doctor';
     case 'export': return `Open the export, ${step.fmt.toUpperCase()}`;
     case 'regen': return `New ${step.part}`;
     case 'energy': return step.delta > 0 ? 'Busier drums' : 'Simpler drums';
@@ -162,7 +190,7 @@ export function describe(step, names = {}) {
     case 'solo': return `${step.on ? 'Solo' : 'Unsolo'} ${who}`;
     case 'pan': return `Pan ${who} ${step.value < 0 ? 'left' : step.value > 0 ? 'right' : 'to the centre'}`;
     case 'vol': return `${step.dB > 0 ? 'Turn up' : 'Turn down'} ${who} by ${Math.abs(step.dB)} dB`;
-    case 'fx': return `Add ${names[step.fx] ?? step.fx} to ${who}`;
+    case 'fx': return `Add ${names[step.fx] ?? step.fx}${step.label ? ` (${step.label})` : ''} to ${who}`;
     case 'unfx': return `Remove ${step.fx ? names[step.fx] ?? step.fx : 'the effects'} from ${who}`;
     case 'kit': return `Load the ${step.name} kit`;
     case 'instrument': return `Play ${who} on ${step.name}`;

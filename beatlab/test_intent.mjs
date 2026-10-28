@@ -18,7 +18,7 @@ const cases = [
   ['swing 30%', 'swing'], ['more swing', 'swingBy'], ['no swing', 'swingBy'],
   ['humanize the drums', 'ai'], ['make the drums feel human', 'ai'], ['add a fill', 'ai'], ['vary the melody', 'ai'], ['switch up the drums', 'ai'],
   ['add 808 slides every 4 bars', 'slides'], ['808 glides', 'slides'], ['add hat rolls every 2 bars', 'hatRolls'],
-  ['auto mix', 'automix'], ['balance the mix', 'automix'], ['export an mp3', 'export'],
+  ['auto mix', 'automix'], ['check my mix', 'doctor'], ['whats wrong with the beat', 'doctor'], ['how does my mix sound', 'doctor'], ['balance the mix', 'automix'], ['export an mp3', 'export'],
   ['new melody', 'regen'], ['different chords', 'regen'], ['change the bassline', 'regen'], ['ai melody', 'ai'], ['ai drums', 'ai'],
   ['busier drums', 'energy'], ['make it more minimal', 'energy'],
   ['mute the hats', 'mute'], ['solo the 808', 'solo'], ['pan the hats left', 'pan'],
@@ -26,7 +26,9 @@ const cases = [
   ['add reverb to the snare', 'fx'], ['put a gate on the chords', 'fx'], ['remove the reverb from the snare', 'unfx'],
   ['use the HQ Funk kit', 'kit'], ['use rhodes on the chords', 'instrument'], ['strings section on the melody', 'instrument'],
   ['make the chords darker', 'tone'], ['brighter hats', 'tone'], ['make the 808 grittier', 'tone'], ['make it warmer', 'tone'], ['more reverb on the melody', 'tone'],
-  ['play', 'play'], ['stop', 'stop'],
+  ['play', 'play'], ['stop', 'stop'], ['half time', 'tempoTimes'],
+  ['half-time the hats', 'fx'], ['stutter the drums on the last beat', 'fx'], ['tape stop at the end of every 4 bars', 'fx'], ['reverse the snare every 2nd bar', 'fx'],
+  ['autotune the vocals', 'fx'], ['hard autotune on my voice', 'fx'], ['pitch the chords up an octave', 'fx'], ['punchier kick', 'fx'], ['shorter tail on the snare', 'fx'],
 ];
 for (const [s, type] of cases) assert.equal(one(s).type, type, `"${s}" -> ${JSON.stringify(plan(s, ctx))}`);
 
@@ -55,6 +57,13 @@ assert.deepEqual(types('tempo 150, key of D minor, play'), ['tempo', 'key', 'pla
 assert.equal(types('do a backflip')[0], 'unknown');
 assert.deepEqual(plan('turn up the kick and the snare by 2 db', ctx)[0], { type: 'vol', parts: ['kick', 'snare'], dB: 2 });
 assert.ok(describe(plan('make the hook darker', ctx)[0], { chords: 'Chords', melody: 'Melody', arp: 'Arp' }).startsWith('Make Chords, Melody and Arp darker'));
+const ht = one('half-time the hats'), ts = one('tape stop at the end of every 4 bars'), st = one('stutter the hats on the last beat in 16ths');
+assert.deepEqual([ht.fx, ht.set, ht.parts], ['warp', { mode: 0, when: 1 }, ['hat']]);
+assert.deepEqual([ts.set, ts.parts], [{ mode: 3, when: 3 }, ['mix']]);
+assert.deepEqual(st.set, { mode: 2, when: 2 });
+assert.deepEqual([one('hard autotune on my voice').set, one('autotune the vocals').parts], [{ speed: 0 }, ['vocals']]);
+assert.deepEqual(one('pitch the chords down 5').set, { semis: -5 });
+assert.equal(describe(ht, { warp: 'Time warp', hat: 'Hats' }), 'Add Time warp (half-time, every 2nd bar) to Hats');
 // the smart brain's reply, however it's dressed, becomes steps the rules carry out
 const reply = ['Sure! Here are the commands:', '1. busier drums', '- more swing', '* "louder kick by 2 db"', '4) make the 808 grittier.'].join('\n');
 assert.equal(fromModel(reply), 'busier drums, more swing, louder kick by 2 db, make the 808 grittier');

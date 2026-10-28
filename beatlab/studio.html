@@ -457,6 +457,24 @@
   .ex-status { min-height: 20px; color: var(--muted); font-size: 12.5px; margin: 14px 0 0; overflow-wrap: anywhere; white-space: pre-line; }
   .ex-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .list { display: grid; gap: 2px; margin-top: 10px; }
+  .doc-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; margin-bottom: 12px; }
+  .doc-head p { margin: 2px 0 0; }
+  .doc-score { width: 74px; height: 74px; border-radius: 50%; display: grid; place-content: center; text-align: center; background: var(--well); box-shadow: var(--sh-well); }
+  .doc-score b { font-size: 26px; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .doc-score small { color: var(--subtle); font-size: 10px; }
+  .doc-chart { background: var(--well); border-radius: 10px; padding: 10px 12px 8px; margin-bottom: 12px; }
+  .doc-bars { display: grid; grid-template-columns: repeat(10, 1fr); height: 112px; position: relative; }
+  .doc-bars::before { content: ''; position: absolute; left: 0; right: 0; top: calc(50% - 8px); border-top: 1px dashed var(--line-2); }
+  .doc-col { position: relative; height: calc(100% - 16px); }
+  .doc-col i { position: absolute; left: 50%; width: 16px; margin-left: -8px; border-radius: 3px; background: var(--line-2); }
+  .doc-col i.off { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+  .doc-col small { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; color: var(--subtle); font-size: 10px; }
+  .doc-chart p { color: var(--subtle); font-size: 11px; margin: 8px 0 0; }
+  .doc-list { display: grid; gap: 8px; max-height: 46vh; overflow: auto; }
+  .doc-issue { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--line); }
+  .doc-issue p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .doc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .doc-dot.hot { background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
   .list .item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; }
   .list .item:hover { background: var(--line); }
   .list .item b { font-weight: 450; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }

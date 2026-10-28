@@ -31,7 +31,7 @@ export function warpSpan(beat, when) {  // the stretch the effect works on, [sta
   return bar % 4 === 3 ? [bar * 4, 4] : null;
 }
 export class Warp {
-  constructor(sr) { this.sr = sr; this.ring = new Ring(Math.ceil(sr * 20)); }
+  constructor(sr) { this.sr = sr; this.ring = new Ring(Math.ceil(sr * 10)); }  // reverse reaches back 8 beats: enough down to 48 BPM
   process(ins, outs, n, v, time) {
     const [L, R] = stereo(ins), spb = 60 / v.bpm, edge = 0.006 / spb, mode = Math.round(v.mode), when = Math.round(v.when);
     for (let i = 0; i < n; i++) {

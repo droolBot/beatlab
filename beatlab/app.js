@@ -6,6 +6,7 @@ import {
 } from './music.js';
 import { Engine, Player, PARAMS, EFFECTS, DELAY_TIMES, GATE_TIMES, PAN_TIMES, VOCODER_BANDS, paramsOf, render, LANES } from './sound.js';
 import { WARP_MODES, WARP_WHEN, KEYS, TUNE_SCALES } from './dsp.js';
+import { diagnose } from './doctor.js';
 import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
 import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable } from './brain.js';
@@ -660,6 +661,62 @@ async function autoMix(say = true) {
   return moves;
 }
 
+// ---------- the mix doctor: listens to the hook, names what's wrong, and fixes it on request ----------
+async function listenToMix() {
+  const p = hookId(song), parts = [];
+  aiStatus('The mix doctor is listening to the whole mix…');
+  const mixBuf = await render(song, p, dusty(), null, { sr: 48000, master: song.master });
+  for (const t of song.tracks) {
+    if (t.mute || t.kind === 'bus' || t.kind === 'audio' || !notesFor(t, p).length) continue;
+    aiStatus(`The mix doctor is listening to the ${trackName(t)}…`);
+    const b = await render(song, p, dusty(), t.id, { sr: 48000, master: song.master }), x = b.getChannelData(0).slice();
+    if (b.numberOfChannels > 1) { const r = b.getChannelData(1); for (let i = 0; i < x.length; i++) x[i] = (x[i] + r[i]) / 2; }
+    parts.push({ id: t.id, name: trackName(t), kind: t.kind, x, lufs: await lufsOf(b), duck: t.duck, target: MIX_TARGET[t.id] ?? KIND_TARGET[t.kind], lowCut: t.fx.some(f => f.type === 'filter' && f.hp > 0.5 && !f.off) });
+  }
+  aiStatus('');
+  return diagnose({ sr: 48000, mix: { l: mixBuf.getChannelData(0), r: mixBuf.getChannelData(mixBuf.numberOfChannels > 1 ? 1 : 0), lufs: await lufsOf(mixBuf), peak: db(peakOf(mixBuf)) }, parts, master: song.master, dusty: dusty() });
+}
+async function applyFix(f) {  // a fix is data from doctor.js; each one is the move a mix engineer would make
+  const t = f.track ? track(f.track) : null;
+  if (f.kind === 'duck') t.duck = f.value;
+  if (f.kind === 'lowcut') for (const id of f.tracks) { const x = track(id); if (x && !x.fx.some(e => e.type === 'filter' && e.hp > 0.5)) x.fx.unshift({ type: 'filter', hp: 1, cutoff: f.f, res: 0.7, auto: true }); }
+  if (f.kind === 'eq') Object.assign(t.fx.find(e => e.doctor) ?? addFx(t, { type: 'peq', doctor: true }), f.set);
+  if (f.kind === 'vol') t.vol = clamp(t.vol * 10 ** (f.dB / 20), 0.02, 1.2);
+  if (f.kind === 'tone') f.tracks.map(track).filter(Boolean).forEach(x => shapeTone(x, f.dir));
+  if (f.kind === 'width') f.tracks.map(track).filter(Boolean).forEach(x => { const w = x.fx.find(e => e.type === 'width') ?? addFx(x, { type: 'width' }); w.width = f.value; });
+  if (f.kind === 'master') song.master = { ...song.master, ...f.set };
+  if (f.kind === 'automix') await autoMix(false);
+  mixChanged();
+}
+const SCORE_WORDS = s => (s >= 90 ? 'Ready to release' : s >= 70 ? 'Nearly there' : s >= 45 ? 'Needs work' : 'Needs a lot of work');
+function doctorChart(r) {  // each octave of the mix against a finished mix: above the line louder, below quieter
+  const cols = r.bands.map((v, i) => {
+    const d = clamp(v - r.ref[i], -18, 18), px = Math.max(2, Math.abs(d) * 2.4);
+    return h('div', { class: 'doc-col', title: `${['30', '60', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'][i]} Hz: ${d > 0 ? '+' : ''}${d.toFixed(1)} dB` },
+      h('i', { class: Math.abs(d) > 3 ? 'off' : '', style: `height:${px}px;${d >= 0 ? `bottom:50%` : `top:50%`}` }),
+      h('small', {}, ['30', '60', '125', '250', '500', '1k', '2k', '4k', '8k', '16k'][i]));
+  });
+  return h('div', { class: 'doc-chart', role: 'img', 'aria-label': "Your mix's frequency balance against a finished mix" },
+    h('div', { class: 'doc-bars' }, cols), h('p', {}, 'Each bar is an octave of your mix against a finished one: above the line is louder, below is quieter. Orange bars are off by more than 3 dB.'));
+}
+async function mixDoctor(before = null) {
+  const r = await listenToMix();
+  const fixAll = h('button', { class: 'key primary btn', style: 'height:34px', onclick: () => withBusy(async () => { for (const i of r.issues) await applyFix(i.fix); changed(); await mixDoctor(r.score); }) }, icon('brain', 15), r.issues.length === 1 ? 'Fix it' : `Fix all ${r.issues.length}`);
+  const card = i => h('div', { class: 'doc-issue', 'data-issue': i.id },
+    h('span', { class: `doc-dot${i.weight >= 12 ? ' hot' : ''}`, 'aria-hidden': 'true' }),
+    h('div', {}, h('b', {}, i.title), h('p', {}, i.detail)),
+    h('button', { class: 'btn small', onclick: () => withBusy(async () => { await applyFix(i.fix); changed(); await mixDoctor(r.score); }) }, i.fixLabel));
+  const gain = before != null ? r.score - before : null;
+  openDialog({ title: 'Mix doctor', glyph: 'brain', body: [
+    h('div', { class: 'doc-head' },
+      h('div', { class: 'doc-score', role: 'img', 'aria-label': `Mix health ${r.score} out of 100` }, h('b', {}, String(r.score)), h('small', {}, '/ 100')),
+      h('div', {}, h('b', {}, SCORE_WORDS(r.score)), h('p', { class: 'note' }, gain != null ? `${gain >= 0 ? `Up ${gain}` : `Down ${-gain}`} from ${before}. Ctrl+Z undoes the fixes.` : `It listened to ${patternOf(song, hookId(song))?.name ?? 'the hook'} part by part, the way an engineer would.`)),
+      r.issues.length ? fixAll : null),
+    doctorChart(r),
+    r.issues.length ? h('div', { class: 'doc-list' }, r.issues.map(card)) : h('p', { class: 'note' }, 'Nothing to fix: this mix measures like a finished one.'),
+  ] });
+}
+
 // ---------- the brain: what you type becomes steps, done as one undo ----------
 const brainCtx = () => ({
   tracks: song.tracks.map(t => ({ id: t.id, name: trackName(t), kind: t.kind })),
@@ -667,7 +724,7 @@ const brainCtx = () => ({
   effects: Object.entries(EFFECTS).map(([id, f]) => ({ id, name: f.name })),
   instruments: flInst.map(i => i.name), kits: flKit.map(k => k.name),
 });
-const brainNames = () => ({ ...Object.fromEntries(song.tracks.map(t => [t.id, trackName(t)])), drums: 'the drums', mix: 'the mix', ...Object.fromEntries(STYLE_IDS.map(id => [id, STYLES[id].name])), ...Object.fromEntries(Object.entries(EFFECTS).map(([id, f]) => [id, f.name])) });
+const brainNames = () => ({ ...Object.fromEntries(song.tracks.map(t => [t.id, trackName(t)])), drums: 'the drums', mix: 'the mix', vocals: 'the vocals', ...Object.fromEntries(STYLE_IDS.map(id => [id, STYLES[id].name])), ...Object.fromEntries(Object.entries(EFFECTS).map(([id, f]) => [id, f.name])) });
 const NEEDS_PARTS = ['mute', 'solo', 'pan', 'unfx', 'instrument'];
 function brainPlan(text) {
   return plan(text, brainCtx()).map(st => (NEEDS_PARTS.includes(st.type) && !(st.parts ?? []).length ? { type: 'unknown', text: describe(st) } : st));
@@ -683,6 +740,7 @@ function partTracks(ps) {
   for (const id of ps) {
     if (id === 'mix') song.tracks.filter(t => t.kind !== 'audio').forEach(t => out.add(t));
     else if (id === 'drums') song.tracks.filter(t => t.kind === 'drum').forEach(t => out.add(t));
+    else if (id === 'vocals') (song.tracks.some(t => t.kind === 'audio') ? song.tracks.filter(t => t.kind === 'audio') : song.tracks.filter(t => t.kind === 'melody')).forEach(t => out.add(t));  // recordings, or the lead if there are none
     else (track(id) ? [track(id)] : song.tracks.filter(t => t.kind === ({ hat: 'drum', snare: 'drum', kick: 'drum', perc: 'drum', openhat: 'drum' }[id] ?? id))).forEach(t => out.add(t));
   }
   return [...out];
@@ -754,6 +812,7 @@ async function runStep(st) {
     case 'slides': return addSlides(st.every, pid);
     case 'hatRolls': return addHatRolls(st.every, pid);
     case 'automix': return autoMix(false);
+    case 'doctor': return mixDoctor();
     case 'export': return openExport(st.fmt === 'mp3' ? { mp3: true } : st.fmt === 'midi' ? { mix: false, stems: false } : st.fmt === 'stems' ? { stems: true } : {});
     case 'regen': song = regenerate(song, st.part); return changed();
     case 'energy': song = refresh(song, { energy: clamp((song.energy ?? ui.energy) + st.delta, 0, 1) }, ['kick', 'snare', 'hat', 'openhat', 'perc', 'bass']); return changed();
@@ -761,7 +820,7 @@ async function runStep(st) {
     case 'solo': ts.forEach(t => { t.solo = st.on; }); return mixChanged();
     case 'pan': ts.forEach(t => { t.pan = st.value; }); return mixChanged();
     case 'vol': ts.forEach(t => { t.vol = clamp(t.vol * 10 ** (st.dB / 20), 0, 1.2); }); return mixChanged();
-    case 'fx': ts.forEach(t => addFx(t, { type: st.fx })); return mixChanged();
+    case 'fx': ts.forEach(t => addFx(t, { type: st.fx, ...st.set })); return mixChanged();
     case 'unfx': ts.forEach(t => { t.fx = t.fx.filter(f => (st.fx ? f.type !== st.fx : f.auto)); }); return mixChanged();
     case 'tone': ts.filter(t => t.kind !== 'audio').forEach(t => shapeTone(t, st.dir)); return mixChanged();
     case 'kit': return loadKit(flKit.find(k => k.name === st.name));
@@ -2524,6 +2583,7 @@ const busesOf = () => song.tracks.filter(t => t.kind === 'bus');
 function renderMixer() {
   V.mixer.tools.replaceChildren(
     h('button', { class: 'btn small', title: 'Measure every part and set the levels where a balanced beat has them', onclick: () => withBusy(() => autoMix()) }, icon('mixer', 14), 'Auto mix'),
+    h('button', { class: 'btn small', title: 'Listen to the mix, explain what to fix and fix it', onclick: () => withBusy(() => mixDoctor()) }, icon('brain', 14), 'Mix doctor'),
     h('button', { class: 'btn small', title: 'Add a bus: several channels into one insert, with its own effects and fader', onclick: () => addBus() }, icon('plus', 14), 'Bus'),
     h('span', { class: 'crumb' }, 'Right-click an effect to bypass, reorder or remove it. Duck ties a channel to the kick.'));
   const scale = () => h('div', { class: 'scale' }, h('span', {}, '0'), h('span', {}, '-12'), h('span', {}, '-24'), h('span', {}, '-48'));
@@ -3213,6 +3273,7 @@ function commands() {
     { group: 'Brain', label: 'AI melody', icon: 'brain', run: aiMelodyButton },
     { group: 'Brain', label: 'AI drums', icon: 'brain', run: aiDrumsButton },
     { group: 'Brain', label: 'Humanize the drums', icon: 'brain', run: aiHumanizeButton },
+    { group: 'Brain', label: 'Check the mix (mix doctor)', icon: 'brain', run: () => withBusy(() => mixDoctor()) },
     { group: 'Brain', label: 'Balance the mix (auto mix)', icon: 'mixer', run: () => withBusy(() => autoMix()) },
     { group: 'Brain', label: `Smart brain ${ui.smart ? 'off' : 'on'} (a free AI model on this computer)`, icon: 'brain', run: toggleSmart },
     { group: 'Brain', label: 'Vary the drums', icon: 'brain', run: () => aiVaryButton('drums') },
