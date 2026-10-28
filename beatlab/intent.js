@@ -175,7 +175,7 @@ export function describe(step, names = {}) {
     case 'tempo': return `Set the tempo to ${step.bpm} BPM`;
     case 'tempoBy': return `${step.delta > 0 ? 'Speed up' : 'Slow down'} by ${Math.abs(step.delta)} BPM`;
     case 'tempoTimes': return step.f > 1 ? 'Double the tempo' : 'Halve the tempo';
-    case 'key': return `Change the key${step.root != null ? ` to ${['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][step.root]}` : ''}${step.mode ? ` ${step.mode}` : ''}`;
+    case 'key': return `Change the key to ${[step.root != null ? ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][step.root] : null, step.mode].filter(Boolean).join(' ')}`;
     case 'transpose': return `Transpose ${step.semis > 0 ? 'up' : 'down'} ${Math.abs(step.semis)} semitone${Math.abs(step.semis) === 1 ? '' : 's'}`;
     case 'swing': return `Set swing to ${Math.round(step.value * 200)}%`;
     case 'swingBy': return step.delta <= -1 ? 'Take the swing out' : step.delta > 0 ? 'Add swing' : 'Less swing';

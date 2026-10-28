@@ -258,7 +258,7 @@
     .tl > :nth-child(n+2), .tr > :first-child, .swoosh, .pct, .dimv, .bl, .br { display: none; }
     .marquee .word { font-size: 26vh; }
     .finale a { font-size: 17vw; }
-    .nav { gap: 0; padding-left: 10px; } .nav a:not(.go) { display: none; }
+    .nav { gap: 0; padding-left: 10px; } .nav a:not(.go, .docs) { display: none; }
     .features { display: flex; flex-direction: column; }
     .screen-wrap { order: -1; top: 64px; height: auto; z-index: 3; padding-block: 8px; background: var(--paper); }
     .step { min-height: 70vh; }
@@ -274,7 +274,7 @@
 <body>
 <h1 class="sr">BeatLab: a free beat studio that works the way FL Studio works</h1>
 
-<nav class="nav" id="nav" aria-label="Sections"><b>BEATLAB</b><a href="#features">Studio</a><a href="#layouts">Layouts</a><a href="#plugins">Plugins</a><a href="#start">Get it</a><a href="#faq">FAQ</a><a class="go" href="studio.html">Open studio →</a></nav>
+<nav class="nav" id="nav" aria-label="Sections"><b>BEATLAB</b><a href="#features">Studio</a><a href="#layouts">Layouts</a><a href="#plugins">Plugins</a><a href="#start">Get it</a><a href="#faq">FAQ</a><a class="docs" href="docs.html">Docs</a><a class="go" href="studio.html">Open studio →</a></nav>
 
 <section class="tape" id="tape" aria-label="Intro">
 <div class="stage" id="stage">
@@ -448,15 +448,15 @@
   </section>
   <div class="foot">
     <div class="wrap cols">
-      <div><p class="brand">BEATLAB</p><p>A free beat studio that runs on your computer and works the way FL Studio works.</p><p><a href="studio.html">Open the studio</a></p></div>
+      <div><p class="brand">BEATLAB</p><p>A free beat studio that runs on your computer and works the way FL Studio works.</p><p><a href="studio.html">Open the studio</a> · <a href="docs.html">Read the docs</a></p></div>
       <div id="changelog"><h4>Changelog</h4><ul>
-        <li><b>28 October 2026</b> FL-style workspace: numbered patterns, a free playlist with pattern and audio clips, the six tools, Rig and DAW layouts and FL's shortcuts.</li>
-        <li><b>Before that</b> Mixer with 14 effects, master chain, LUFS meters, and WAV, MP3, stem and MIDI export.</li>
-        <li><b>Before that</b> Make a beat in 12 styles, with AI melody and AI drums.</li>
+        <li><b>29 October 2026</b> The mix doctor, humming into the piano roll, Time warp, Tune, a pitch shifter, a transient shaper, the acid bass, favourites and the docs.</li>
+        <li><b>28 October 2026</b> FL-style workspace, FM and wavetable synths, a slicer, a vocoder, automation clips, buses, BeatLab's own sample library, and the whole studio on the website.</li>
+        <li><b>Before that</b> Mixer, master chain, LUFS meters, WAV, MP3, stem and MIDI export, and Make a beat in 12 styles with AI melody and drums.</li>
       </ul></div>
-      <div id="privacy"><h4>Privacy</h4><p>No accounts and no analytics. Your projects, recordings and settings stay in this browser on this computer. The app loads its code, fonts and, if you switch them on, AI models from public servers (jsDelivr, Google Fonts, Google Cloud Storage), and none of those requests carry your music.</p></div>
+      <div id="privacy"><h4>Privacy</h4><p>No accounts and no analytics. Your projects, recordings and settings stay in this browser on this computer. The app loads its code, fonts and, if you switch them on, AI models from public servers (jsDelivr, Google Fonts, Google Cloud Storage, Hugging Face). Song search asks Apple for previews. None of those requests carry your music.</p></div>
       <div id="credits"><h4>Credits</h4><ul>
-        <li>Three.js, MIT</li><li>Magenta.js, Apache 2.0</li><li>lamejs, LGPL 3.0</li><li>Anton, Space Grotesk, IBM Plex Mono, Geist and DSEG fonts, SIL Open Font License</li>
+        <li>Three.js, MIT</li><li>Magenta.js, Apache 2.0</li><li>WebLLM and Qwen2.5, Apache 2.0</li><li>lamejs, LGPL 3.0</li><li>Anton, Space Grotesk, IBM Plex Mono, Geist and DSEG fonts, SIL Open Font License</li>
       </ul></div>
     </div>
     <div class="wrap small"><span>© 2026 KIKA · BeatLab</span><span>FL Studio is a trademark of Image-Line. BeatLab isn't affiliated with Image-Line.</span></div>

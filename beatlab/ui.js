@@ -72,6 +72,16 @@ const PATHS = {
   pads: '<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6" fill="currentColor"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
 };
+// Every shortcut, for the F1 help and the docs page
+export const SHORTCUTS = [['Space', 'Play or stop'], ['L', 'Pattern or song mode'], ['R', 'Record'], ['M', 'Metronome'], ['Alt+T (Ctrl+T in the app)', 'Typing keyboard to piano'],
+  ['F4', 'New pattern'], ['F2', 'Rename the pattern'], ['Numpad + and -', 'Next or previous pattern'], ['Ctrl+Shift+C', 'Clone the pattern'],
+  ['F5', 'Playlist'], ['F6', 'Channel rack'], ['F7', 'Piano roll'], ['F8', 'Browser'], ['F9', 'Mixer'], ['F10', 'Audio and MIDI settings'], ['F11', 'Project info'], ['F12', 'Close all windows'], ['F1', 'Shortcuts and help'],
+  ['Ctrl+Z', 'Undo'], ['Ctrl+Y', 'Redo'], ['Ctrl+S', 'Save a version'], ['Alt+N (Ctrl+N in the app)', 'Save a named version'], ['Ctrl+O', 'Open a project'], ['Ctrl+R', 'Export WAV'], ['Ctrl+Shift+R', 'Export MP3'], ['Ctrl+Shift+M', 'Export MIDI'], ['Ctrl+K', 'Find any action'],
+  ['P B D T C E', 'Draw, paint, delete, mute, slice and select tools'], ['Alt while dragging', 'Ignore snap'], ['Shift-drag a clip', 'Drag a copy'], ['Right-click', 'Delete a clip or note'],
+  ['Ctrl+A', 'Select all'], ['Ctrl+B', 'Duplicate the selection'], ['Ctrl+C, V, X', 'Copy, paste, cut notes'], ['Ctrl+Q', 'Quantize notes'], ['Ctrl+L', 'Legato notes'], ['Delete', 'Delete the selection'],
+  ['Up and Down', 'Notes a semitone, Ctrl for an octave'], ['Left and Right', 'Notes a step'], ['Up and Down in the rack', 'Select a channel'], ['Alt+Delete', 'Delete the selected channel'],
+  ['Shift-click a step', 'Roll: 2, 3 or 4 hits'], ['Right-click a step', 'Velocity, chance, ratchet'], ['Double-click a pattern clip', 'Edit that pattern'], ['Double-click the marker strip', 'Add a marker'], ['Click the ruler', 'Set the song position']];
+
 export function icon(name, size = 16) {
   const s = h('span', { class: 'icon', 'aria-hidden': 'true' });
   s.innerHTML = `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${PATHS[name]}</svg>`;

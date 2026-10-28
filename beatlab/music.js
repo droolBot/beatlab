@@ -36,6 +36,13 @@ export const SOUNDS = {
   keys: 'Electric piano', piano: 'Piano', organ: 'Organ', pad: 'Pad', strings: 'Strings', guitar: 'Guitar', sitar: 'Sitar', pluck: 'Pluck',
   bell: 'Bell', flute: 'Flute', lead: 'Synth lead', vox: 'Vocal synth', brass: 'Brass', synth: 'Trio synth', acid: 'Acid bass', fm: 'FM synth', wave: 'Wavetable', slicer: 'Slicer', vinyl: 'Vinyl crackle', fx: 'Risers and impacts',
 };
+// What each sound is, for the plugin browser and the docs
+export const SOUND_INFO = {
+  kick: 'Synth kick with tune, decay and punch', snare: 'Synth snare with snap', clap: 'Layered hand clap', hat: 'Closed hi-hat', openhat: 'Open hi-hat, choked by the closed one', rim: 'Rim shot', shaker: 'Shaker', conga: 'Tuned conga', tom: 'Tom', tabla: 'Tabla with pitch bend', cowbell: 'Two-tone cowbell',
+  808: '808 bass with drive, glide and tone', acid: 'Acid bass: a squelchy resonant filter, accents on loud notes, slides on tied ones', bass: 'Filtered synth bass', reese: 'Detuned Reese bass', logdrum: 'Amapiano log drum',
+  keys: 'Electric piano with tine and tremolo', piano: 'Acoustic-style piano', organ: 'Drawbar organ with Leslie', pad: 'Warm detuned pad', strings: 'String ensemble with vibrato', guitar: 'Plucked nylon guitar', pluck: 'Bright plucked synth', bell: 'FM bell', vox: 'Vowel choir', brass: 'Brass section',
+  flute: 'Breathy flute', lead: 'Detuned lead with glide', sitar: 'Buzzing sitar', synth: 'Three oscillators, unison, filter envelope and LFO', fm: 'Three FM operators: electric pianos, bells, basses, brass', wave: 'Morphing wavetables scanned by an envelope and an LFO', slicer: 'Chops a dropped loop into slices you rearrange on the steps', vinyl: 'Vinyl crackle bed', fx: 'Risers and impacts',
+};
 export const SOUNDS_FOR = {
   drum: ['kick', 'snare', 'clap', 'hat', 'openhat', 'rim', 'shaker', 'conga', 'tom', 'tabla', 'cowbell', 'slicer'],
   bass: ['808', 'bass', 'reese', 'acid', 'logdrum', 'synth', 'fm', 'wave'],

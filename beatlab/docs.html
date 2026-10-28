@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BeatLab docs</title>
+<meta name="description" content="How to use BeatLab: making beats, the brain, humming, mixing with the mix doctor, every plugin, exporting to FL Studio, and every shortcut.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  /* A manual in BeatLab's print: sage paper and olive-black ink (graphite and orange in the dark), a sticky
+     contents column, and the reference parts written from the studio's own code. */
+  :root {
+    --bg: #CDD2C0; --paper: #DADDCF; --line: #A8AF98; --ink: #171A12; --soft: #3D4332; --accent: #B33E0A; --accent-ink: #FFF6EE; --kbd: #EEF0E7;
+    --display: Anton, Impact, 'Arial Narrow', sans-serif; --body: 'Space Grotesk', Arial, sans-serif; --mono: 'IBM Plex Mono', 'Courier New', monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #141414; --paper: #1C1C1C; --line: #2E2E2E; --ink: #ECEBE6; --soft: #A6A6A0; --accent: #FF6A2B; --accent-ink: #171A12; --kbd: #262626; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #141414; --paper: #1C1C1C; --line: #2E2E2E; --ink: #ECEBE6; --soft: #A6A6A0; --accent: #FF6A2B; --accent-ink: #171A12; --kbd: #262626; color-scheme: dark }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: calc(76px + env(safe-area-inset-top, 0px)); }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.65 var(--body); -webkit-text-size-adjust: 100%; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+  a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  .bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1.5px solid var(--ink); }
+  .bar-in { max-width: 1240px; margin: 0 auto; padding-block: 14px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 18px; }
+  .mark { font: 400 26px/1 var(--display); letter-spacing: .04em; text-decoration: none; }
+  .tag { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); }
+  .bar .grow { flex: 1; }
+  .go { font: 600 14px/1 var(--body); text-decoration: none; background: var(--ink); color: var(--bg); padding: 11px 16px; border-radius: 999px; white-space: nowrap; }
+
+  .page { max-width: 1240px; margin: 0 auto; padding-block: 40px 120px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 56px; }
+  .toc { position: sticky; top: calc(84px + env(safe-area-inset-top, 0px)); align-self: start; max-height: calc(100vh - 110px); overflow: auto; display: grid; gap: 2px; font-size: 15px; }
+  .toc p { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); margin: 0 0 10px; }
+  .toc a { text-decoration: none; padding: 5px 10px; border-radius: 8px; border-left: 2px solid transparent; }
+  .toc a:hover { background: var(--paper); }
+  .toc a.here { border-left-color: var(--accent); background: var(--paper); font-weight: 600; }
+  .toc-mobile { display: none; }
+
+  main { min-width: 0; max-width: 780px; display: grid; gap: 72px; }
+  .intro { display: grid; gap: 16px; }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin: 0; }
+  h1 { font: 400 clamp(54px, 8vw, 96px)/.95 var(--display); text-transform: uppercase; margin: 0; letter-spacing: .01em; }
+  h2 { font: 400 clamp(34px, 4.6vw, 46px)/1 var(--display); text-transform: uppercase; margin: 0; letter-spacing: .01em; text-wrap: balance; }
+  h3 { font: 700 20px/1.3 var(--body); margin: 8px 0 0; text-wrap: balance; }
+  p, ul, ol { margin: 0; }
+  section { display: grid; gap: 16px; scroll-margin-top: 90px; }
+  section > header { display: grid; gap: 10px; border-bottom: 1.5px solid var(--ink); padding-bottom: 14px; margin-bottom: 4px; }
+  .lede { font-size: 20px; line-height: 1.55; color: var(--soft); max-width: 62ch; }
+  ul, ol { padding-left: 22px; display: grid; gap: 8px; }
+  li::marker { color: var(--soft); }
+  ol.steps { list-style: none; padding: 0; counter-reset: s; gap: 12px; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: start; }
+  ol.steps li::before { content: counter(s); font: 600 14px/34px var(--mono); text-align: center; width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--ink); }
+  kbd { font: 600 13px/1 var(--mono); background: var(--kbd); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 3px 7px; white-space: nowrap; }
+  .note { background: var(--paper); border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; padding: 14px 18px; color: var(--ink); }
+  .note b { font-weight: 700; }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .item { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .item h3 { margin: 0; font-size: 17px; }
+  .item p { color: var(--soft); font-size: 15px; line-height: 1.5; }
+  .knobs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+  .knobs span { font: 500 12px/1 var(--mono); border: 1px solid var(--line); border-radius: 999px; padding: 5px 8px; color: var(--soft); }
+  .presets { font: 500 12px/1.5 var(--mono); color: var(--soft); }
+  .presets b { color: var(--ink); font-weight: 600; }
+  .group { font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); margin-top: 18px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  tr:first-child th { border-top: none; }
+  th { font: 600 12px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--soft); }
+  td:first-child { white-space: nowrap; width: 1%; }
+  .say { display: grid; gap: 10px; }
+  .say div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .say code { font: 500 14px/1.5 var(--mono); color: var(--ink); }
+  .say code::before { content: "› "; color: var(--accent); }
+  .say ul { list-style: none; padding: 0; gap: 4px; font-size: 15px; color: var(--soft); }
+  .say li::before { content: "→ "; color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips span { font: 500 14px/1 var(--body); background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; }
+  details { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  details + details { margin-top: -6px; }
+  summary { cursor: pointer; font-weight: 700; }
+  details[open] summary { margin-bottom: 8px; }
+  .foot { border-top: 1.5px solid var(--ink); padding-top: 20px; color: var(--soft); font-size: 15px; display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+  @media (max-width: 900px) {
+    .page { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-top: 24px; }
+    .toc { display: none; }
+    .toc-mobile { display: block; }
+    .toc-mobile nav { display: grid; gap: 2px; margin-top: 8px; }
+    .toc-mobile a { text-decoration: none; padding: 6px 4px; }
+    .two { grid-template-columns: minmax(0, 1fr); }
+    .say div { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    .tag { display: none; }
+  }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in">
+  <a class="mark" href="index.html" aria-label="BeatLab home">BEATLAB</a>
+  <span class="tag">Docs</span>
+  <span class="grow"></span>
+  <a class="go" href="studio.html">Open the studio →</a>
+</div></div>
+
+<div class="page">
+  <aside class="toc" aria-label="Contents" id="toc">
+    <p>On this page</p>
+    <a href="#start">Start here</a>
+    <a href="#studio">The studio</a>
+    <a href="#make">Make a beat</a>
+    <a href="#brain">Talk to the brain</a>
+    <a href="#write">Write and record</a>
+    <a href="#hum">Hum it</a>
+    <a href="#mix">Mix</a>
+    <a href="#doctor">The mix doctor</a>
+    <a href="#plugins">Plugins</a>
+    <a href="#sounds">Sounds</a>
+    <a href="#listen">Listen</a>
+    <a href="#export">Export</a>
+    <a href="#projects">Projects</a>
+    <a href="#shortcuts">Shortcuts</a>
+    <a href="#help">Help</a>
+  </aside>
+
+  <main>
+    <div class="intro">
+      <p class="eyebrow">The BeatLab manual</p>
+      <h1>Make beats<br>with BeatLab</h1>
+      <p class="lede">BeatLab is a free beat studio that works the way FL Studio works. You write patterns, paint them onto a playlist, mix and export. A brain does the boring parts when you ask. This page covers all of it, from your first beat to every plugin and shortcut.</p>
+      <details class="toc-mobile"><summary>On this page</summary><nav aria-label="Contents">
+        <a href="#start">Start here</a><a href="#studio">The studio</a><a href="#make">Make a beat</a><a href="#brain">Talk to the brain</a><a href="#write">Write and record</a><a href="#hum">Hum it</a><a href="#mix">Mix</a><a href="#doctor">The mix doctor</a><a href="#plugins">Plugins</a><a href="#sounds">Sounds</a><a href="#listen">Listen</a><a href="#export">Export</a><a href="#projects">Projects</a><a href="#shortcuts">Shortcuts</a><a href="#help">Help</a>
+      </nav></details>
+    </div>
+
+    <section id="start">
+      <header><p class="eyebrow">Start here</p><h2>Your first beat in a minute</h2></header>
+      <p>There are two ways to run BeatLab. Both are free and have the same studio.</p>
+      <div class="two">
+        <div class="item"><h3>In your browser</h3><p>Open <a href="studio.html">the studio</a> on this website. Nothing to install. Use Chrome or Edge.</p></div>
+        <div class="item"><h3>On Windows</h3><p>Download it from <a href="https://github.com/droolBot/beatlab">GitHub</a> (Code, then Download ZIP), unzip it, and double-click <b>Install BeatLab.bat</b>. Then double-click <b>BeatLab</b> on your Desktop. Exports save straight into a folder, and FL Studio’s sounds work on their own.</p></div>
+      </div>
+      <ol class="steps">
+        <li><span>Open the studio and click anywhere once. Browsers only start sound after a click.</span></li>
+        <li><span>In the <b>Brain</b> panel, pick a style, then press <b>Make a beat</b>. Drums, 808, chords and a melody appear as patterns on the playlist.</span></li>
+        <li><span>Press <kbd>Space</kbd> to play. Change anything you like, then press <kbd>Ctrl+R</kbd> to export.</span></li>
+      </ol>
+      <p class="note"><b>Everything saves as you go.</b> Your beats live in this browser on this computer. To move a beat to another computer, or keep a backup, use File, then Save as a project file.</p>
+    </section>
+
+    <section id="studio">
+      <header><p class="eyebrow">The studio</p><h2>Where everything is</h2></header>
+      <p>The top bar has the transport, the song position, the tempo, the key and the pattern picker. Under it is the main screen, and under that the hardware: the Brain, 16 drum pads and a turntable.</p>
+      <div class="two">
+        <div class="item"><h3>Playlist <kbd>F5</kbd></h3><p>The song. Paint pattern clips, audio clips and automation clips onto tracks.</p></div>
+        <div class="item"><h3>Channel rack <kbd>F6</kbd></h3><p>Every sound in the beat, with a 16-step sequencer per channel and a graph for velocity and chance.</p></div>
+        <div class="item"><h3>Piano roll <kbd>F7</kbd></h3><p>Notes for the selected channel. Click a key on the left and it plays.</p></div>
+        <div class="item"><h3>Mixer <kbd>F9</kbd></h3><p>A strip per channel: effects, pan, sidechain duck, reverb and delay sends, the fader, mute and solo.</p></div>
+        <div class="item"><h3>Master</h3><p>Loudness meters, a spectrum, stereo correlation and the master chain: glue, width and the limiter.</p></div>
+        <div class="item"><h3>Browser <kbd>F8</kbd> and Listen</h3><p>Every instrument, effect and sample, and a page that analyzes any song so you can make a beat like it.</p></div>
+      </div>
+      <p><b>Two layouts.</b> <b>Rig</b> shows one big screen with tabs. <b>DAW</b>, top right, gives you FL-style floating windows you can drag, resize and close (<kbd>F12</kbd> closes them all). Switch whenever you like.</p>
+      <p><b>Dark or white.</b> The Dark or white studio button in the top bar switches the studio’s look.</p>
+    </section>
+
+    <section id="make">
+      <header><p class="eyebrow">Make a beat</p><h2>From a style to a full beat</h2></header>
+      <p>The <b>Brain</b> panel writes a whole beat in one press. Pick one of these styles:</p>
+      <div class="chips" id="styles"><span>Trap</span><span>Drill</span><span>Lofi</span><span>R&amp;B</span></div>
+      <ul>
+        <li><b>Energy</b> sets how busy the drums are. <b>Complexity</b> sets how rich the chords and the melody get.</li>
+        <li><b>FL sounds</b> or <b>Sample kits</b> picks real drum kits and instruments that suit the style. <b>AI feel</b> gives the drums a drummer’s timing. <b>Auto mix</b> balances the levels when the beat is made.</li>
+        <li><b>New part</b> rewrites one part and keeps the rest: new drums, new chords, a new 808 or a new melody. It can also ask the AI to write the hook melody or play the verse drums.</li>
+      </ul>
+      <p>Your own channels and recordings stay when you make a new beat. <kbd>Ctrl+Z</kbd> brings the last beat back.</p>
+    </section>
+
+    <section id="brain">
+      <header><p class="eyebrow">Talk to the brain</p><h2>Type what you want</h2></header>
+      <p>Press <kbd>Ctrl+K</kbd> (or <b>Ask</b> in the Brain panel) and type a request in plain words. The brain shows you its plan first. Press <kbd>Enter</kbd> and it does it as ordinary edits you can change. One <kbd>Ctrl+Z</kbd> takes the whole request back. Join several requests with commas or “and”.</p>
+      <p>These are real examples. Each shows what the brain says it will do:</p>
+      <div class="say" id="brain-examples"><div><code>make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4 bars</code><ul><li>Make a new Drill beat at 142 BPM</li><li>Add 808 slides every 2 bars</li><li>Add hi-hat rolls every 4 bars</li></ul></div></div>
+      <p class="note"><b>The smart brain.</b> For anything the brain doesn’t understand, turn on <b>Smart brain</b> in the New part menu. A small free AI model (Qwen 2.5) then rewrites your request into commands BeatLab knows. It downloads once, about 1 GB, and needs a browser with WebGPU, like current Chrome or Edge. It runs on your computer, and it can only do what the brain can do.</p>
+      <p>The free Magenta models from Google do the musical parts: <b>Humanize</b> gives programmed drums a drummer’s timing, <b>Vary</b> writes a variation (press again for the next), and <b>Fill</b> plays a drum fill.</p>
+    </section>
+
+    <section id="write">
+      <header><p class="eyebrow">Write and record</p><h2>Steps, notes and takes</h2></header>
+      <h3>In the channel rack</h3>
+      <ul>
+        <li>Click or drag across steps to paint them. Drag from a lit step to clear.</li>
+        <li><kbd>Shift</kbd>-click a step for a roll of 2, 3 or 4 hits. Right-click it for velocity, chance and ratchet.</li>
+        <li>The mouse wheel over a step changes its velocity. <b>Graph</b> draws velocity or chance for every step at once.</li>
+        <li><b>Drum kit</b> loads a whole kit onto your drum channels, with the hits switching takes by how hard they’re played.</li>
+      </ul>
+      <h3>In the piano roll</h3>
+      <ul>
+        <li>The tools: draw <kbd>P</kbd>, paint <kbd>B</kbd>, delete <kbd>D</kbd>, mute <kbd>T</kbd>, slice <kbd>C</kbd> and select <kbd>E</kbd>. Right-click deletes a note.</li>
+        <li><b>Chord stamp</b> places a whole chord per click. <b>Scale snap</b> keeps new and moved notes in the song’s key.</li>
+        <li><kbd>Ctrl+Q</kbd> quantizes, <kbd>Ctrl+L</kbd> makes notes legato, and <b>Humanize</b> loosens timing and velocity like a player.</li>
+      </ul>
+      <h3>Recording</h3>
+      <ul>
+        <li><b>Audio:</b> in Song mode, press <kbd>R</kbd>. After a one-bar count-in, the microphone records onto an audio track from the song position. Press <kbd>Space</kbd> to stop.</li>
+        <li><b>Notes:</b> in Pattern mode, press <kbd>R</kbd> and play a MIDI keyboard, the pads, or your computer keyboard. Turn that on with <kbd>Alt+T</kbd>.</li>
+        <li><kbd>F10</kbd> opens the audio and MIDI settings: count-in, hearing yourself, the audio buffer, a recording offset, and MIDI devices.</li>
+      </ul>
+    </section>
+
+    <section id="hum">
+      <header><p class="eyebrow">Hum it</p><h2>Hum a melody into the piano roll</h2></header>
+      <p>Got a hook in your head? Hum it, sing it or whistle it, and BeatLab writes the notes for you.</p>
+      <ol class="steps">
+        <li><span>Select the channel the melody should go on (a melody, chord or bass channel), then press <b>Hum it</b> in the piano roll. You can also type “let me hum a melody” after <kbd>Ctrl+K</kbd>.</span></li>
+        <li><span>Allow the microphone if the browser asks. The beat plays a one-bar count-in.</span></li>
+        <li><span>Hum through one pass of the pattern, on “da” or “la”. When the pattern ends, the notes appear: in the song’s key, on the beat, in the right octave for that part.</span></li>
+      </ol>
+      <p class="note"><b>Wear headphones,</b> so the beat doesn’t leak into the microphone. Short separate syllables give the cleanest notes. <kbd>Ctrl+Z</kbd> takes the notes back if you want another go.</p>
+    </section>
+
+    <section id="mix">
+      <header><p class="eyebrow">Mix</p><h2>Make it sound finished</h2></header>
+      <ul>
+        <li><b>Effects:</b> click an empty slot on a mixer strip to add an effect. Right-click one to bypass, reorder or remove it. Each strip holds up to 8. The channel’s window shows their knobs.</li>
+        <li><b>Duck</b> on a strip ties that channel to the kick, so the 808 or the chords dip out of the way on each hit.</li>
+        <li><b>Buses:</b> press <b>Bus</b> to add one, then route channels into it from the strip, to treat a group together.</li>
+        <li><b>Automation:</b> in the playlist, <b>Automate</b> adds a clip for a channel’s volume, filter cutoff or pan. Drag its points to shape it.</li>
+        <li><b>Auto mix</b> measures every part and sets the levels where a balanced beat has them. A second press changes nothing once it’s balanced.</li>
+        <li><b>The master chain</b> in the Master view: glue compression, stereo width, the limiter ceiling and the master volume, with loudness meters that match the export.</li>
+      </ul>
+    </section>
+
+    <section id="doctor">
+      <header><p class="eyebrow">The mix doctor</p><h2>It listens, explains, and fixes</h2></header>
+      <p>Press <b>Mix doctor</b> in the mixer, or type “check my mix”. It plays the hook through part by part and measures it the way an engineer listens, in 10 to 20 seconds. Then it gives you:</p>
+      <ul>
+        <li><b>A score out of 100</b>: Ready to release, Nearly there, or Needs work.</li>
+        <li><b>A chart</b> of your mix’s octaves against a finished mix’s. Orange bars are off by more than 3 dB.</li>
+        <li><b>Every problem in plain words</b>, each with its own Fix button. <b>Fix all</b> does them together, listens again, and shows the new score. One <kbd>Ctrl+Z</kbd> undoes every fix.</li>
+      </ul>
+      <div class="table-wrap"><table>
+        <tr><th>It checks</th><th>What it means</th><th>The fix</th></tr>
+        <tr><td>Kick against the 808</td><td>Both loud below 120 Hz at the same moments, so they blur into one boom</td><td>Ducks the 808 under the kick</td></tr>
+        <tr><td>Low end in the wrong parts</td><td>Chords, melody or FX with lots of sound under 120 Hz, adding rumble</td><td>Low cuts on those parts</td></tr>
+        <tr><td>Mud</td><td>Too much around 250 to 500 Hz, which sounds boxy and cloudy</td><td>Cuts 300 Hz on the part causing it</td></tr>
+        <tr><td>Harshness</td><td>Too much around 2 to 5 kHz, which tires ears on headphones</td><td>Softens 3.5 kHz on the part causing it</td></tr>
+        <tr><td>Dull top</td><td>Too little above 6 kHz, as if behind a curtain (lofi styles are left dusty)</td><td>Brightens the hats</td></tr>
+        <tr><td>Thin or heavy low end</td><td>Too little or too much below 90 Hz</td><td>Turns the 808 up or down 3 dB</td></tr>
+        <tr><td>Balance</td><td>A part more than 4 dB louder or quieter than where it usually sits</td><td>Runs Auto mix</td></tr>
+        <tr><td>Stereo</td><td>Sides so different they cancel on a phone, or so alike the beat sounds small</td><td>Narrows the master, or widens the chords</td></tr>
+        <tr><td>Squeeze</td><td>Too little, or far too much, room between the loudest peak and the average</td><td>Less or more glue on the master</td></tr>
+      </table></div>
+    </section>
+
+    <section id="plugins">
+      <header><p class="eyebrow">Plugins</p><h2>Every instrument and effect</h2></header>
+      <p>Every channel plays one of BeatLab’s own instruments, a sample, or an FL Studio instrument. Open a channel’s window by clicking its name in the channel rack. Presets are under the arrows by the plugin’s name. In the browser (<kbd>F8</kbd> in the DAW layout), click the star on any plugin to keep it in <b>Favourites</b>.</p>
+      <p class="group">Instruments</p>
+      <div class="two" id="instruments"><div class="item"><h3>Loading the list…</h3><p>The instruments are read from the studio itself.</p></div></div>
+      <p class="group">Effects</p>
+      <p>Four effects run sample by sample on the browser’s audio thread: <b>Time warp</b>, <b>Tune</b>, the <b>Pitch shifter</b> and the <b>Transient shaper</b>. Time warp follows the bar line, and Tune follows the song’s key, unless you pick another.</p>
+      <div class="two" id="effects"><div class="item"><h3>Loading the list…</h3><p>The effects are read from the studio itself.</p></div></div>
+    </section>
+
+    <section id="sounds">
+      <header><p class="eyebrow">Sounds</p><h2>Kits, samples and FL Studio’s packs</h2></header>
+      <ul>
+        <li><b>BeatLab’s own sounds:</b> Trap, Drill, Lofi, Boom Bap and House kits (three takes of every hit), five 808s and five loops, in the <b>Sounds</b> view. Click a sound to hear it. <b>Load</b> puts it on the selected channel, or drag it onto any channel.</li>
+        <li><b>Your own samples:</b> drop a WAV or MP3 onto any channel, or onto the playlist as an audio clip. Drop a loop onto a <b>Slicer</b> channel to play its slices.</li>
+        <li><b>FL Studio’s packs, on Windows:</b> if FL Studio is installed, BeatLab finds its packs on its own, with multi-sampled instruments and kits with velocity layers.</li>
+        <li><b>FL Studio’s packs, on the website:</b> in Sounds, press <b>Connect FL Studio</b> and pick the Packs folder, usually <code>C:\Program Files\Image-Line\FL Studio 2025\Data\Patches\Packs</code>. Chrome calls it uploading, but nothing leaves your computer. Connect it again on each visit. Beats keep their FL sounds in the meantime.</li>
+      </ul>
+    </section>
+
+    <section id="listen">
+      <header><p class="eyebrow">Listen</p><h2>Learn from a song you like</h2></header>
+      <p>In the <b>Listen</b> view, drop in a song or one of your own beats, or search for a song. The search uses Apple’s free 30-second previews; an Apple Music link works too. BeatLab shows the song’s tempo, key, loudness and the closest styles, and can:</p>
+      <ul>
+        <li><b>Make a beat like this</b> (the button names the closest style), at its tempo and in its key. Tick <b>Copy its drum groove</b> to take its timing too. This works best on beats without vocals.</li>
+        <li><b>Compare in the Master view,</b> where the song plays at your mix’s loudness, so you hear the difference and not the volume.</li>
+      </ul>
+    </section>
+
+    <section id="export">
+      <header><p class="eyebrow">Export</p><h2>Into FL Studio, or out to the world</h2></header>
+      <p>Press <kbd>Ctrl+R</kbd> (or <b>Export</b>, top right). Pick the pattern or the full song, then what to write:</p>
+      <ul>
+        <li><b>Audio:</b> the full mix as WAV (16, 24 or 32-bit), plus MP3 at 320 kbps if you like. Stems are one file per part, and dry stems have no effects, for mixing fresh.</li>
+        <li><b>Extra versions:</b> instrumental (no recordings), without the melody (for vocals), and drums only.</li>
+        <li><b>Loudness:</b> as mixed, or mastered to a target such as Spotify and YouTube at -14 LUFS, with peaks kept under -1 or -0.3 dB.</li>
+        <li><b>MIDI</b> for every part, always. Bass can be written around C5, for 808 samples in FL, or at its real pitch, for synth plugins.</li>
+      </ul>
+      <p>On Windows, the files land in a folder inside BeatLab’s <b>exports</b> folder, with a loudness report. On the website, they download together as one zip.</p>
+      <h3>Into FL Studio</h3>
+      <ol class="steps">
+        <li><span>Drag a part’s <b>.mid</b> file into FL Studio’s channel rack. Choose the instrument you want it played by.</span></li>
+        <li><span>Drag the WAV stems into the playlist to keep BeatLab’s sounds, or the mix as a reference.</span></li>
+      </ol>
+    </section>
+
+    <section id="projects">
+      <header><p class="eyebrow">Projects</p><h2>Saving, versions and files</h2></header>
+      <ul>
+        <li>BeatLab saves as you work. <kbd>Ctrl+S</kbd> saves a version you can go back to, and <kbd>Alt+N</kbd> saves one with a name.</li>
+        <li><kbd>Ctrl+O</kbd> opens another project. File, then New project, starts a fresh one.</li>
+        <li><b>Save as a project file</b> writes one <b>.beatlab</b> file with your recordings inside. Use it for backups and to move a beat to another computer.</li>
+      </ul>
+    </section>
+
+    <section id="shortcuts">
+      <header><p class="eyebrow">Shortcuts</p><h2>Your hands already know it</h2></header>
+      <p>BeatLab follows FL Studio’s keys. A few that Chrome keeps for itself use <kbd>Alt</kbd> instead. <kbd>F1</kbd> shows this list in the studio.</p>
+      <div class="table-wrap"><table id="shortcuts-table"><tr><th>Keys</th><th>What they do</th></tr><tr><td><kbd>Space</kbd></td><td>Play or stop</td></tr></table></div>
+    </section>
+
+    <section id="help">
+      <header><p class="eyebrow">Help</p><h2>When something’s off</h2></header>
+      <details><summary>There’s no sound</summary><p>Click anywhere in the studio once: browsers start sound only after a click. Check that the master volume is up and no channel is soloed.</p></details>
+      <details><summary>The sound crackles or stutters</summary><p>Press <kbd>F10</kbd> and choose a larger <b>Audio buffer</b>, Medium or Large, then reload the page. Closing other tabs helps too.</p></details>
+      <details><summary>The microphone doesn’t work</summary><p>Allow the microphone for this page, using the icon in the address bar, then try again. Use headphones when you record or hum, so the beat doesn’t leak in. If takes land late, set the recording offset in <kbd>F10</kbd>.</p></details>
+      <details><summary>FL Studio’s sounds are missing</summary><p>On Windows, BeatLab looks for FL Studio in Program Files. A few FL samples only play once ffmpeg is installed: run <code>winget install Gyan.FFmpeg</code> in a terminal, then restart BeatLab. On the website, press <b>Connect FL Studio</b> in Sounds on each visit.</p></details>
+      <details><summary>The smart brain won’t turn on</summary><p>It needs WebGPU, which current Chrome and Edge have on most PCs, and about 1 GB downloaded once. Without it, typed requests still work through the regular brain.</p></details>
+      <details><summary>Song search says Apple is limiting searches</summary><p>Apple allows a limited number of searches a minute. Wait a minute and search again, or drop in an audio file instead.</p></details>
+      <details><summary>Where are my beats, and are they private?</summary><p>In this browser’s storage, on this computer. Nothing is uploaded: no account, no analytics, and the AI runs on your computer. Clearing the site’s data deletes your beats, so keep a project file as a backup.</p></details>
+      <details><summary>Which browsers work?</summary><p>Chrome and Edge on Windows are what BeatLab is built and tested on. Other modern browsers mostly work, but the smart brain and some features may not.</p></details>
+      <div class="foot">
+        <a href="index.html">BeatLab home</a>
+        <a href="studio.html">Open the studio</a>
+        <a href="https://github.com/droolBot/beatlab">Source on GitHub</a>
+        <a href="https://github.com/droolBot/beatlab/blob/main/ROADMAP.md">Roadmap</a>
+        <span>Free and open source (MIT). FL Studio is a trademark of Image-Line; BeatLab isn’t affiliated with Image-Line.</span>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script type="module">
+  // The reference parts come from the studio's own code, so the docs always match the app
+  import { PARAMS, EFFECTS } from './sound.js';
+  import { SOUNDS, SOUNDS_FOR, SOUND_INFO, STYLES } from './music.js';
+  import { PRESETS } from './instruments.js';
+  import { plan, describe } from './intent.js';
+  import { SHORTCUTS } from './ui.js';
+
+  const el = (tag, attrs = {}, ...kids) => { const e = document.createElement(tag); Object.assign(e, attrs); e.append(...kids.flat().filter(k => k != null)); return e; };
+  const knobs = list => el('div', { className: 'knobs' }, list.map(p => el('span', {}, p[1])));
+  const presets = id => (PRESETS[id] ? el('p', { className: 'presets' }, el('b', {}, 'Presets '), Object.keys(PRESETS[id]).join(' · ')) : null);
+  const ROLE = { drum: 'Drums', bass: 'Bass', chords: 'Keys and pads', melody: 'Leads', texture: 'Texture', fx: 'FX' };
+
+  document.querySelector('#styles').replaceChildren(...Object.values(STYLES).map(s => el('span', {}, s.name)));
+
+  document.querySelector('#instruments').replaceChildren(...Object.keys(SOUNDS).map(id => {
+    const roles = Object.entries(SOUNDS_FOR).filter(([, list]) => list.includes(id)).map(([k]) => ROLE[k] ?? k);
+    return el('div', { className: 'item' }, el('h3', {}, SOUNDS[id]), el('p', {}, `${SOUND_INFO[id] ?? ''}${roles.length ? `. For ${roles.join(', ').toLowerCase()}` : ''}.`.replace('..', '.')), knobs(PARAMS[id] ?? []), presets(id));
+  }));
+
+  const groups = [...new Set(Object.values(EFFECTS).map(f => f.group))];
+  document.querySelector('#effects').replaceChildren(...groups.flatMap(g => Object.entries(EFFECTS).filter(([, f]) => f.group === g).map(([, f]) =>
+    el('div', { className: 'item' }, el('h3', {}, f.name), el('p', {}, `${g}. ${f.info}.`), knobs(f.params)))));
+
+  const ctx = { tracks: [], instruments: [], kits: [], styles: Object.entries(STYLES).map(([id, s]) => ({ id, name: s.name })), effects: Object.entries(EFFECTS).map(([id, f]) => ({ id, name: f.name })) };
+  const names = { kick: 'Kick', snare: 'Snare', hat: 'Hats', openhat: 'Open hat', perc: 'Perc', bass: '808', chords: 'Chords', arp: 'Arp', melody: 'Melody', texture: 'Vinyl', fx: 'Risers and FX', drums: 'the drums', mix: 'the mix', vocals: 'the vocals', ...Object.fromEntries(ctx.styles.map(s => [s.id, s.name])), ...Object.fromEntries(ctx.effects.map(f => [f.id, f.name])) };
+  const EXAMPLES = [
+    'make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4 bars',
+    'tempo 140 and key of G minor', 'more swing and busier drums', 'new melody', 'humanize the drums and add a fill',
+    'louder kick, turn the chords down 4 db and pan the hats left', 'add reverb to the snare and make the chords darker',
+    'half-time the hats', 'stutter the drums on the last beat', 'tape stop at the end of every 4 bars',
+    'autotune the vocals', 'pitch the chords up an octave', 'punchier kick',
+    'auto mix', 'check my mix', 'let me hum a melody', 'export an mp3',
+  ];
+  document.querySelector('#brain-examples').replaceChildren(...EXAMPLES.map(s => el('div', {}, el('code', {}, s), el('ul', {}, plan(s, ctx).map(st => el('li', {}, describe(st, names)))))));
+
+  const table = document.querySelector('#shortcuts-table');
+  table.replaceChildren(el('tr', {}, el('th', {}, 'Keys'), el('th', {}, 'What they do')), ...SHORTCUTS.map(([k, d]) => el('tr', {}, el('td', {}, el('kbd', {}, k)), el('td', {}, d))));
+
+  // the contents column marks the section being read
+  const links = new Map([...document.querySelectorAll('#toc a')].map(a => [a.getAttribute('href').slice(1), a]));
+  const spy = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting) { links.forEach(a => a.classList.remove('here')); links.get(e.target.id)?.classList.add('here'); }
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  document.querySelectorAll('main section[id]').forEach(s => spy.observe(s));
+</script>
+</body>
+</html>

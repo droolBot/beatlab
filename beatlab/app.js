@@ -2,7 +2,7 @@
 // brain and the 3D deck. Every edit is undoable and autosaved into the open project.
 import {
   STYLES, NOTES, SOUNDS, SOUNDS_FOR, SECTION_NAMES, PPQ, STEP, BAR, generate, regenerate, refresh, changeMode, transpose,
-  arrange, suggestStyles, noteName, songScale, trackName, notesFor, pickKit, COLORS, newTrack, songLength, patternOf, newPatternId, clipId, upgrade, PATTERN_COLORS, ROWS,
+  arrange, suggestStyles, noteName, songScale, trackName, notesFor, pickKit, COLORS, newTrack, songLength, patternOf, newPatternId, clipId, upgrade, PATTERN_COLORS, ROWS, SOUND_INFO,
 } from './music.js';
 import { Engine, Player, PARAMS, EFFECTS, DELAY_TIMES, GATE_TIMES, PAN_TIMES, VOCODER_BANDS, paramsOf, render, LANES } from './sound.js';
 import { WARP_MODES, WARP_WHEN, KEYS, TUNE_SCALES, maskOf } from './dsp.js';
@@ -17,7 +17,7 @@ import { lufsOf, finish, encodeWav, encodeMp3, limitInPlace, peakOf, db, midiFil
 import { projects, putAudio, getAudio, delAudio, audioIds, newId } from './store.js';
 import { openInput, capture, inputLatency, setMonitor, inputName, connectMidi, typingNote, GM_DRUMS } from './record.js';
 import { createMeters, fmtLU, drawSpectrum, drawScope } from './meters.js';
-import { $ as $doc, h, icon, knob, fader, menu, picker, toggle, floating, toast, lcdText, openDialog, palette } from './ui.js';
+import { $ as $doc, h, icon, knob, fader, menu, picker, toggle, floating, toast, lcdText, openDialog, palette, SHORTCUTS } from './ui.js';
 
 // Finds elements in views that aren't on screen right now too (the Rig layout keeps one view attached at a time)
 const $ = sel => $doc(sel) ?? Object.values(V).map(v => v.body.querySelector(sel) ?? v.tools.querySelector(sel)).find(Boolean) ?? null;
@@ -1998,12 +1998,6 @@ function setLayout(l) {
 }
 
 // The browser down the left of the DAW layout: the plugin library, FL Studio's sounds and this project
-const GEN_INFO = {
-  kick: 'Synth kick with tune, decay and punch', snare: 'Synth snare with snap', clap: 'Layered hand clap', hat: 'Closed hi-hat', openhat: 'Open hi-hat, choked by the closed one', rim: 'Rim shot', shaker: 'Shaker', conga: 'Tuned conga', tom: 'Tom', tabla: 'Tabla with pitch bend', cowbell: 'Two-tone cowbell',
-  808: '808 bass with drive, glide and tone', acid: 'Acid bass: a squelchy resonant filter, accents on loud notes, slides on tied ones', bass: 'Filtered synth bass', reese: 'Detuned Reese bass', logdrum: 'Amapiano log drum',
-  keys: 'Electric piano with tine and tremolo', piano: 'Acoustic-style piano', organ: 'Drawbar organ with Leslie', pad: 'Warm detuned pad', strings: 'String ensemble with vibrato', guitar: 'Plucked nylon guitar', pluck: 'Bright plucked synth', bell: 'FM bell', vox: 'Vowel choir', brass: 'Brass section',
-  flute: 'Breathy flute', lead: 'Detuned lead with glide', sitar: 'Buzzing sitar', synth: 'Three oscillators, unison, filter envelope and LFO', fm: 'Three FM operators: electric pianos, bells, basses, brass', wave: 'Morphing wavetables scanned by an envelope and an LFO', slicer: 'Chops a dropped loop into slices you rearrange on the steps', vinyl: 'Vinyl crackle bed', fx: 'Risers and impacts',
-};
 const GEN_GROUPS = [['Drums', 'drum'], ['Bass', 'bass'], ['Keys and pads', 'chords'], ['Leads', 'melody']];
 function showBrowser(tab) { ui.btab = tab; save(); renderBrowser(); }
 function renderBrowser() {
@@ -2020,14 +2014,14 @@ function renderBrowser() {
       onclick: ev => { ev.stopPropagation(); ui.favs = favs.has(key) ? [...favs].filter(x => x !== key) : [...favs, key]; save(); renderBrowser(); } }, icon('star', 13));
     const add = (folder, key, ...args) => entries.push([folder, key, () => item(...args, star(key))]);
     for (const [group, kind] of GEN_GROUPS) {
-      for (const s of SOUNDS_FOR[kind].filter(s => hit(`${SOUNDS[s]} ${GEN_INFO[s] ?? ''} ${group}`))) add(`Instruments · ${group}`, `g:${kind}:${s}`, SOUNDS[s], GEN_INFO[s] ?? '', 'knob', () => addChannel(kind, s), `${GEN_INFO[s] ?? SOUNDS[s]}. Click to add it as a new channel`);
+      for (const s of SOUNDS_FOR[kind].filter(s => hit(`${SOUNDS[s]} ${SOUND_INFO[s] ?? ''} ${group}`))) add(`Instruments · ${group}`, `g:${kind}:${s}`, SOUNDS[s], SOUND_INFO[s] ?? '', 'knob', () => addChannel(kind, s), `${SOUND_INFO[s] ?? SOUNDS[s]}. Click to add it as a new channel`);
     }
     for (const group of [...new Set(flInst.map(i => i.group))]) {
       for (const i of flInst.filter(i => i.group === group && hit(`${i.name} ${group} FL Studio`))) add(`FL Studio · ${group}`, `i:${i.id}`, i.name, i.files.length > 1 ? `${i.files.length} samples` : 'one sample', 'piano', () => addFlChannel(i), `${i.name} from FL Studio's packs. Click to add it as a new channel`);
     }
     for (const k of flKit.filter(k => hit(`${k.name} drum kit`))) add('FL Studio · Drum kits', `k:${k.id}`, k.name, `${k.files.length} samples`, 'pads', () => loadKit(k), `Put the ${k.name} kit on your drum channels`);
     for (const g of FX_GROUPS) {
-      for (const [k, fx] of Object.entries(EFFECTS).filter(([, fx]) => fx.group === g && hit(`${fx.name} ${g} effect`))) add(`Effects · ${g}`, `f:${k}`, fx.name, fx.params.map(p => p[1].toLowerCase()).join(', '), 'mixer', () => {
+      for (const [k, fx] of Object.entries(EFFECTS).filter(([, fx]) => fx.group === g && hit(`${fx.name} ${fx.info} ${g} effect`))) add(`Effects · ${g}`, `f:${k}`, fx.name, fx.info, 'mixer', () => {
         if (!sel) return toast('Select a channel first.');
         if (sel.fx.length >= 8) return toast(`${trackName(sel)} already has 8 effects.`);
         sel.fx.push({ type: k });
@@ -2128,6 +2122,7 @@ function menuBar() {
     ],
     Help: () => [
       { label: 'Shortcuts and help', icon: 'help', hint: 'F1', onSelect: openHelp },
+      { label: 'BeatLab docs', icon: 'help', hint: 'New tab', onSelect: () => window.open('docs.html', '_blank', 'noopener') },
       { label: 'About BeatLab', icon: 'info', onSelect: () => toast('BeatLab runs on this computer: no account, no subscription. It reads and writes files FL Studio opens.') },
     ],
   };
@@ -3265,16 +3260,9 @@ async function cleanUpAudio() {
 }
 
 // ---------- help, command palette, keys, MIDI ----------
-const SHORTCUTS = [['Space', 'Play or stop'], ['L', 'Pattern or song mode'], ['R', 'Record'], ['M', 'Metronome'], ['Alt+T (Ctrl+T in the app)', 'Typing keyboard to piano'],
-  ['F4', 'New pattern'], ['F2', 'Rename the pattern'], ['Numpad + and -', 'Next or previous pattern'], ['Ctrl+Shift+C', 'Clone the pattern'],
-  ['F5', 'Playlist'], ['F6', 'Channel rack'], ['F7', 'Piano roll'], ['F8', 'Browser'], ['F9', 'Mixer'], ['F10', 'Audio and MIDI settings'], ['F11', 'Project info'], ['F12', 'Close all windows'], ['F1', 'This help'],
-  ['Ctrl+Z', 'Undo'], ['Ctrl+Y', 'Redo'], ['Ctrl+S', 'Save a version'], ['Alt+N (Ctrl+N in the app)', 'Save a named version'], ['Ctrl+O', 'Open a project'], ['Ctrl+R', 'Export WAV'], ['Ctrl+Shift+R', 'Export MP3'], ['Ctrl+Shift+M', 'Export MIDI'], ['Ctrl+K', 'Find any action'],
-  ['P B D T C E', 'Draw, paint, delete, mute, slice and select tools'], ['Alt while dragging', 'Ignore snap'], ['Shift-drag a clip', 'Drag a copy'], ['Right-click', 'Delete a clip or note'],
-  ['Ctrl+A', 'Select all'], ['Ctrl+B', 'Duplicate the selection'], ['Ctrl+C, V, X', 'Copy, paste, cut notes'], ['Ctrl+Q', 'Quantize notes'], ['Ctrl+L', 'Legato notes'], ['Delete', 'Delete the selection'],
-  ['Up and Down', 'Notes a semitone, Ctrl for an octave'], ['Left and Right', 'Notes a step'], ['Up and Down in the rack', 'Select a channel'], ['Alt+Delete', 'Delete the selected channel'],
-  ['Shift-click a step', 'Roll: 2, 3 or 4 hits'], ['Right-click a step', 'Velocity, chance, ratchet'], ['Double-click a pattern clip', 'Edit that pattern'], ['Double-click the marker strip', 'Add a marker'], ['Click the ruler', 'Set the song position']];
 function openHelp() {
   openDialog({ title: 'Shortcuts and help', glyph: 'help', body: [
+    h('p', { class: 'note' }, 'Everything about BeatLab, from your first beat to every plugin, is in ', h('a', { href: 'docs.html', target: '_blank', rel: 'noopener' }, 'the docs'), '.'),
     h('div', { class: 'help-grid' }, SHORTCUTS.map(([k, d]) => h('div', {}, h('kbd', {}, k), h('span', {}, d)))),
     h('div', { class: 'sect' }, 'How it fits together'),
     h('p', { class: 'note', style: 'font-size:13px;line-height:1.6' }, 'It works like FL Studio. Pick a pattern at the top, program it in the channel rack (F6) or the piano roll (F7), then paint it onto the playlist (F5) with the draw or paint tool. L switches between playing the pattern and the whole song. The Brain makes a full beat as named patterns already on the playlist. Mix in the mixer (F9), check loudness in Master, record your microphone onto an audio channel in Song mode, and export MIDI, WAV and MP3 for FL Studio. View > DAW layout gives you floating windows instead of one screen. Everything autosaves into the project named top left, and Ctrl+Z undoes any change.'),
@@ -3333,6 +3321,7 @@ function commands() {
     { group: 'Studio', label: `Computer keyboard piano ${ui.typing ? 'off' : 'on'}`, icon: 'keyboard', run: toggleTyping },
     { group: 'Studio', label: 'Connect a MIDI keyboard', icon: 'midi', run: startMidi },
     { group: 'Studio', label: 'Shortcuts and help', icon: 'help', keys: 'F1', run: openHelp },
+    { group: 'Studio', label: 'Read the BeatLab docs', icon: 'help', run: () => window.open('docs.html', '_blank', 'noopener') },
     { group: 'Studio', label: 'Go to the home page', icon: 'left', run: () => { location.href = '/'; } },
   ];
 }

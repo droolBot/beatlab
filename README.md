@@ -7,7 +7,7 @@ A free beat studio that runs in your browser and works the way FL Studio works: 
 
 
 
-Try it in your browser: **https://droolbot.github.io/beatlab/**
+Try it in your browser: **https://droolbot.github.io/beatlab/**. How to use it: **[the docs](https://droolbot.github.io/beatlab/docs.html)**.
 
 ## What's inside
 
