@@ -611,7 +611,7 @@ async function makeBeat(opts = {}) {
     if (ui.aiFeel) for (const p of new Set([hookId(song), song.patterns.find(x => x.name === 'Verse')?.id].filter(Boolean))) await humanizeIn(p);
     if (ui.autoMix) await autoMix(false);
     changed();
-    const extras = [opts.groove && 'drum groove copied from the reference', used.length && `FL sounds: ${used.slice(0, 3).join(', ')}`, (ui.aiMel || ui.aiDrm || ui.aiFeel) && 'AI parts included', ui.autoMix && 'mix balanced'].filter(Boolean);
+    const extras = [opts.groove && 'drum groove copied from the reference', used.length && `Sounds: ${used.slice(0, 3).join(', ')}`, (ui.aiMel || ui.aiDrm || ui.aiFeel) && 'AI parts included', ui.autoMix && 'mix balanced'].filter(Boolean);
     aiStatus('');
     toast(`New ${st.name} beat at ${bpm} BPM in ${NOTES[root]} ${mode}${opts.like ? `, like ${opts.like}` : ''}.${extras.length ? ` ${extras.join('; ')}.` : ''} Ctrl+Z brings the last one back.`);
   }
