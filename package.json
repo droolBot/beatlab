@@ -2,6 +2,7 @@
   "name": "beatlab",
   "version": "0.9.0",
   "private": true,
+  "license": "MIT",
   "description": "A free beat studio that runs on your computer and works the way FL Studio works.",
   "type": "module",
   "scripts": {

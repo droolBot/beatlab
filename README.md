@@ -4,6 +4,8 @@ A free beat studio that runs in your browser and works the way FL Studio works: 
 
 ![BeatLab in Rig layout](beatlab/media/rig.webp)
 
+Try it in your browser: **https://droolbot.github.io/beatlab/**
+
 ## What's inside
 
 - **The FL workflow.** Numbered patterns, a channel rack with a step graph, a piano roll you can play, and a free playlist with pattern, audio and automation clips. There's a mixer with inserts, buses and sends, and FL's tools, menus and shortcuts, with a cheat sheet on F1. Two layouts: Rig (one big screen with hardware around it) and DAW (floating, resizable windows, like FL).
@@ -89,5 +91,7 @@ These libraries load from jsDelivr when they're first needed:
 | Anton, Space Grotesk, IBM Plex Mono, Geist (Google Fonts) and DSEG7 | SIL Open Font License |
 
 Song previews come from Apple's iTunes Search API (30-second previews only). BeatLab's sample library was made with BeatLab's own synths. The turntable model is the author's own.
+
+BeatLab itself is MIT licensed: see [LICENSE](LICENSE).
 
 FL Studio is a trademark of Image-Line. BeatLab isn't affiliated with or endorsed by Image-Line, and it includes none of their software or samples.
