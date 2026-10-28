@@ -474,8 +474,19 @@ const PLUGINS = [
   ['Space', 'Stereo width', 'From mono to wide', x => Math.sin(x * 20) * (0.15 + x * 0.75), 'fx'],
   ['Space', 'Delay', 'Tempo-synced, ping-pong', x => Math.exp(-(x * 5 % 1) * 14) * 0.6 ** Math.floor(x * 5) * Math.sin(x * 200), 'fx'],
   ['Space', 'Reverb', 'Rooms to halls, with tone', x => Math.sin(x * 977) * Math.sin(x * 313) * Math.exp(-x * 3.5), 'fx'],
-  ['Coming next', 'FM, wavetable, sampler, slicer', 'More instruments on the roadmap', x => Math.sin(x * 30 + Math.sin(x * 45) * 2) * 0.7, 'next'],
-  ['Coming next', 'Multiband, vocoder, gate', 'More effects on the roadmap', x => Math.sin(x * 40) * Math.sign(Math.sin(x * 9)) * 0.7, 'next'],
+  ['Synth', 'Trio synth', 'Three oscillators, unison, filter envelope', x => (Math.sin(x * 30) + Math.sin(x * 30.4) * 0.8 + Math.sin(x * 15) * 0.5) * 0.4],
+  ['Synth', 'FM synth', 'Three operators, bells to basses', x => Math.sin(x * 30 + Math.sin(x * 45) * 2 * Math.exp(-x * 2)) * 0.8],
+  ['Synth', 'Wavetable', 'Tables that morph as you play', x => Math.sin(x * 30 + Math.sin(x * 60) * x * 1.5) * 0.8],
+  ['Bass', 'Acid bass', 'Squelch, accents and slides', x => Math.sin(x * 30 - Math.sin(x * 3) * 6) * Math.exp(-(x * 4 % 1) * 3) * 0.85],
+  ['Sampler', 'Slicer', 'Drop a loop, play its slices', x => Math.sin(x * 70) * Math.exp(-(x * 8 % 1) * 6) * 0.8],
+  ['Tone', 'Parametric EQ', 'Five bands, with its curve', x => 0.45 * Math.exp(-(((x - 0.3) / 0.06) ** 2)) - 0.35 * Math.exp(-(((x - 0.7) / 0.09) ** 2)), 'fx'],
+  ['Dynamics', 'Multiband', 'Three bands squashed apart', x => Math.sin(x * 40) * (0.4 + 0.3 * Math.sign(Math.sin(x * 6))), 'fx'],
+  ['Dynamics', 'Transient shaper', 'More punch or a shorter tail', x => Math.sin(x * 40) * Math.exp(-(x * 3 % 1) * 9) * 1.2, 'fx'],
+  ['Modulation', 'Vocoder', 'Any channel becomes the voice', x => Math.sin(x * 50) * Math.abs(Math.sin(x * 7)) * 0.9, 'fx'],
+  ['Modulation', 'Gate', 'Beat-locked volume chops', x => Math.sin(x * 50) * (Math.sin(x * 16) > 0 ? 0.85 : 0.08), 'fx'],
+  ['Time', 'Time warp', 'Half-time, stutter, tape stop, reverse', x => Math.sin(x * 40 * (1 - x * 0.6)) * (1 - x * 0.5) * 0.85, 'fx'],
+  ['Pitch', 'Tune', 'Pulls a voice to the key', x => Math.sin(x * 40 + Math.round(Math.sin(x * 4) * 3) * x * 4) * 0.8, 'fx'],
+  ['Pitch', 'Pitch shifter', 'Up or down an octave', x => Math.sin(x * 80) * 0.5 + Math.sin(x * 40) * 0.35, 'fx'],
 ];
 const track = $('#track');
 track.innerHTML = PLUGINS.map(([cat, name, text, f, kind], i) => `<article class="card ${kind ?? ''}"><div class="cat"><span>${cat}</span><span>${String(i + 1).padStart(2, '0')}</span></div><svg viewBox="0 0 200 120" aria-hidden="true"><path d="${wavePath(f)}" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg><div><h3>${name}</h3><p>${text}</p></div></article>`).join('');

@@ -109,6 +109,7 @@ export function plan(input, ctx) {
     else if ((m = t.match(/\b(808|bass)? ?(slides?|glides?)\b(?:.*?every (\w+) bars?)?/)) && m[2]) push('slides', { every: num(m[3]) ?? 2 });
     else if ((m = t.match(/\b(hat|hi-?hat)? ?(rolls?|ratchets?|triplets)\b(?:.*?every (\w+) bars?)?/)) && m[2] && /hat|roll/.test(t)) push('hatRolls', { every: num(m[3]) ?? 2 });
     else if (/\b(check|diagnose|doctor|review|rate|whats wrong|what is wrong|feedback|how does (it|this|my \w+) sound)\b/.test(t) && /\b(mix|beat|song|track|it|this|doctor)\b/.test(t)) push('doctor');
+    else if (/\b(hum|humming|sing|whistle)\b/.test(t) && !/\b(auto-?tune|tune)\b/.test(t)) push('hum');
     else if (/\b(auto[ -]?mix|mix it|balance|level (it|the mix)|fix the mix|mixdown)\b/.test(t)) push('automix');
     else if ((m = t.match(/\bexport\b.*?\b(mp3|wav|stems?|midi)?\b/)) && /\bexport\b/.test(t)) push('export', { fmt: /mp3/.test(t) ? 'mp3' : /stem/.test(t) ? 'stems' : /midi/.test(t) ? 'midi' : 'wav' });
     else if ((m = t.match(/\b(new|different|another|change the|rewrite( the)?|regenerate( the)?|redo( the)?)\b.*?\b(drums?|chords?|bass(line)?|808|melody|lead)\b/))) {
@@ -183,6 +184,7 @@ export function describe(step, names = {}) {
     case 'hatRolls': return `Add hi-hat rolls every ${step.every} bar${step.every === 1 ? '' : 's'}${where}`;
     case 'automix': return 'Balance the mix';
     case 'doctor': return 'Check the mix with the mix doctor';
+    case 'hum': return 'Listen to you hum a melody and write it down';
     case 'export': return `Open the export, ${step.fmt.toUpperCase()}`;
     case 'regen': return `New ${step.part}`;
     case 'energy': return step.delta > 0 ? 'Busier drums' : 'Simpler drums';

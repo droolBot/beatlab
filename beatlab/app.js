@@ -5,7 +5,8 @@ import {
   arrange, suggestStyles, noteName, songScale, trackName, notesFor, pickKit, COLORS, newTrack, songLength, patternOf, newPatternId, clipId, upgrade, PATTERN_COLORS, ROWS,
 } from './music.js';
 import { Engine, Player, PARAMS, EFFECTS, DELAY_TIMES, GATE_TIMES, PAN_TIMES, VOCODER_BANDS, paramsOf, render, LANES } from './sound.js';
-import { WARP_MODES, WARP_WHEN, KEYS, TUNE_SCALES } from './dsp.js';
+import { WARP_MODES, WARP_WHEN, KEYS, TUNE_SCALES, maskOf } from './dsp.js';
+import { humToNotes } from './hum.js';
 import { diagnose } from './doctor.js';
 import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
@@ -470,12 +471,43 @@ async function startRecording() {
   }
   changed();
 }
+// Hum a melody: one pass of the pattern after a count-in, then the humming becomes notes in the key
+const HUM_CENTER = { melody: 72, chords: 62, bass: 40 };
+async function startHum() {
+  audio();
+  if (rec) return;
+  if (player.playing) player.stop();
+  stopRef();
+  try { await openInput(ctx); } catch (e) { return toast(`BeatLab can't hear a microphone (${e.message}). Allow microphone access for this page in the address bar, or plug one in.`); }
+  const sel = track(ui.selected), t = sel && HUM_CENTER[sel.kind] ? sel : song.tracks.find(x => x.kind === 'melody');
+  if (!t) return toast('Add a melody channel first, then hum into it.');
+  if (ui.mode === 'song') setMode('pattern');
+  player.load(song, view(), dusty(), audioBufs);
+  rec = { kind: 'hum', id: t.id, pid: ui.pattern, cap: capture(ctx), len: arrange(song, view()).length };
+  player.start(0, 1);
+  const r = rec;
+  setTimeout(() => { if (rec === r) stopRecording(); }, (4 * 60 / song.bpm + r.len * spt()) * 1000 + 250);  // the count-in bar, then one pass
+  renderTransport();
+  toast(`Hum or sing the ${trackName(t)} for ${pat().name} after the count-in. BeatLab writes it in ${NOTES[song.root]} ${song.mode} when the pattern ends. Space stops early.`);
+}
 async function stopRecording() {
   const r = rec, musicStart = player.countUntil, s = spt();
   rec = null;
   player.stop();
   renderTransport();
   if (r.kind === 'notes') return changed();
+  if (r.kind === 'hum') {
+    const got = await r.cap.stop(), t = track(r.id);
+    if (!got || !t) return toast('Nothing was heard.');
+    const latency = inputLatency() + (ctx.outputLatency || 0) + (ctx.baseLatency || 0) + ui.recOffset / 1000, sr = got.buffer.sampleRate;
+    const x = got.buffer.getChannelData(0).subarray(Math.round(Math.max(0, musicStart - got.start + latency) * sr));
+    const notes = humToNotes(x, sr, { bpm: song.bpm, mask: maskOf(songScale(song)), step: STEP, ppq: PPQ, center: HUM_CENTER[t.kind], maxTicks: r.len });
+    if (!notes.length) return toast("BeatLab couldn't hear a tune in that. Hum a little louder or closer to the microphone, on 'da' or 'la'.");
+    t[r.pid] = notes;
+    if (t.id !== ui.selected) select(t.id);
+    changed();
+    return toast(`Wrote ${notes.length} notes from your humming onto ${trackName(t)}, in ${NOTES[song.root]} ${song.mode} and on the beat. Ctrl+Z takes them back.`);
+  }
   const got = await r.cap.stop();
   const t = track(r.id);
   if (!got || !t) return toast('Nothing was recorded.');
@@ -813,6 +845,7 @@ async function runStep(st) {
     case 'hatRolls': return addHatRolls(st.every, pid);
     case 'automix': return autoMix(false);
     case 'doctor': return mixDoctor();
+    case 'hum': return startHum();
     case 'export': return openExport(st.fmt === 'mp3' ? { mp3: true } : st.fmt === 'midi' ? { mix: false, stems: false } : st.fmt === 'stems' ? { stems: true } : {});
     case 'regen': song = regenerate(song, st.part); return changed();
     case 'energy': song = refresh(song, { energy: clamp((song.energy ?? ui.energy) + st.delta, 0, 1) }, ['kick', 'snare', 'hat', 'openhat', 'perc', 'bass']); return changed();
@@ -929,6 +962,7 @@ function newPartMenu(anchor) {
     { label: `AI melody for ${pat().name}`, hint: 'Follows the chords', icon: 'brain', onSelect: aiMelodyButton },
     { label: `AI drums for ${pat().name}`, hint: 'From bars 1 and 2', icon: 'brain', onSelect: aiDrumsButton },
     { label: 'Tell the brain…', hint: 'Ctrl+K', icon: 'brain', onSelect: askBrain },
+    { label: 'Hum a melody', hint: 'Into the microphone', icon: 'mic', onSelect: startHum },
     { label: 'Smart brain for anything it doesn’t know', hint: 'Free, 1 GB once', active: ui.smart, onSelect: toggleSmart },
     { label: 'Humanize the drums', hint: 'A drummer\'s feel', icon: 'brain', onSelect: aiHumanizeButton },
     { label: 'Vary the drums', hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('drums') },
@@ -2338,6 +2372,7 @@ function renderRoll() {
     h('button', { class: 'btn small', title: 'Snap the selected notes (or all) to the grid (Q)', onclick: () => transform(list => quantize(list, rollGrid())) }, 'Quantize'),
     h('button', { class: 'btn small', title: 'Loosen timing and velocity a little, like a player', onclick: () => transform(list => humanize(list, Math.random)) }, 'Humanize'),
     t.id === 'melody' ? h('button', { class: 'btn small', onclick: () => aiMelodyButton() }, icon('brain', 14), `AI melody`) : null,
+    t.kind !== 'drum' ? h('button', { class: 'btn small', title: 'Hum or sing this part into the microphone; BeatLab writes the notes in the key', onclick: startHum }, icon('mic', 14), 'Hum it') : null,
     t.kind !== 'drum' ? h('button', { class: 'btn small', title: 'The AI writes a variation of this part. Press again for the next one', onclick: () => aiVaryButton('melody') }, icon('brain', 14), 'Vary') : null,
     h('button', { class: 'btn small ghost', title: 'Remove every note in this pattern', onclick: () => { t[editable(t)] = []; rollSel.clear(); changed(); } }, icon('trash', 14), 'Clear')].filter(Boolean));
   const keys = h('div', { class: 'keys' });
@@ -3273,6 +3308,7 @@ function commands() {
     { group: 'Brain', label: 'AI melody', icon: 'brain', run: aiMelodyButton },
     { group: 'Brain', label: 'AI drums', icon: 'brain', run: aiDrumsButton },
     { group: 'Brain', label: 'Humanize the drums', icon: 'brain', run: aiHumanizeButton },
+    { group: 'Brain', label: 'Hum a melody into the piano roll', icon: 'mic', run: startHum },
     { group: 'Brain', label: 'Check the mix (mix doctor)', icon: 'brain', run: () => withBusy(() => mixDoctor()) },
     { group: 'Brain', label: 'Balance the mix (auto mix)', icon: 'mixer', run: () => withBusy(() => autoMix()) },
     { group: 'Brain', label: `Smart brain ${ui.smart ? 'off' : 'on'} (a free AI model on this computer)`, icon: 'brain', run: toggleSmart },

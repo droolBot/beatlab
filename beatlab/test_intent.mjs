@@ -18,7 +18,7 @@ const cases = [
   ['swing 30%', 'swing'], ['more swing', 'swingBy'], ['no swing', 'swingBy'],
   ['humanize the drums', 'ai'], ['make the drums feel human', 'ai'], ['add a fill', 'ai'], ['vary the melody', 'ai'], ['switch up the drums', 'ai'],
   ['add 808 slides every 4 bars', 'slides'], ['808 glides', 'slides'], ['add hat rolls every 2 bars', 'hatRolls'],
-  ['auto mix', 'automix'], ['check my mix', 'doctor'], ['whats wrong with the beat', 'doctor'], ['how does my mix sound', 'doctor'], ['balance the mix', 'automix'], ['export an mp3', 'export'],
+  ['auto mix', 'automix'], ['check my mix', 'doctor'], ['let me hum a melody', 'hum'], ['i want to sing the hook', 'hum'], ['whats wrong with the beat', 'doctor'], ['how does my mix sound', 'doctor'], ['balance the mix', 'automix'], ['export an mp3', 'export'],
   ['new melody', 'regen'], ['different chords', 'regen'], ['change the bassline', 'regen'], ['ai melody', 'ai'], ['ai drums', 'ai'],
   ['busier drums', 'energy'], ['make it more minimal', 'energy'],
   ['mute the hats', 'mute'], ['solo the 808', 'solo'], ['pan the hats left', 'pan'],

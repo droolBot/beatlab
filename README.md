@@ -15,10 +15,23 @@ Try it in your browser: **https://droolbot.github.io/beatlab/**
 
 
 - **The FL workflow.** Numbered patterns, a channel rack with a step graph, a piano roll you can play, and a free playlist with pattern, audio and automation clips. There's a mixer with inserts, buses and sends, and FL's tools, menus and shortcuts, with a cheat sheet on F1. Two layouts: Rig (one big screen with hardware around it) and DAW (floating, resizable windows, like FL).
-- **Built-in instruments.** A sampler, a three-oscillator synth, an FM synth, a wavetable synth, a slicer, and 808 and drum voices, each with presets.
-- **Built-in effects.** Parametric EQ, multiband compressor, gate, auto-pan, vocoder, delay, reverb, distortion and more. Every plugin has its own window.
+- **Built-in instruments.** A sampler, a three-oscillator synth, an FM synth, a wavetable synth, an acid bass with accents and slides, a slicer, and 808 and drum voices, each with presets. Star any plugin to keep it in Favourites.
+- **Built-in effects.** 23 of them: parametric EQ, multiband compressor, gate, auto-pan, vocoder, delay, reverb, distortion and more. Every plugin has its own window.
+- **Effects on the audio thread.** Four effects run sample by sample in an AudioWorklet:
+  - **Time warp:** half-time, stutter, tape stop and reverse, locked to the bar
+  - **Tune:** hears the note being sung and pulls it to the song's key
+  - **Pitch shifter**
+  - **Transient shaper:** more punch or a shorter tail
 - **Sounds.** BeatLab ships its own kits (Trap, Drill, Lofi, Boom Bap, House), 808s and loops. If FL Studio is installed, BeatLab also plays FL's own packs from your install, on the website too: multi-sampled instruments, and drum kits with velocity layers.
 - **The brain.** Ctrl+K takes requests like "make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4". It shows the plan, then does it as one undo. For drums it uses Google's free Magenta models to humanize, write variations and play fills. An optional smart mode runs a small language model (Qwen2.5 1.5B) inside your browser to understand sentences the rules don't.
+- **The mix doctor.** It listens to your beat part by part and scores it out of 100. It checks:
+  - the frequency balance against a finished mix
+  - the kick fighting the 808
+  - low end in parts that don't need it
+  - the levels, the stereo, and how squeezed the master is
+
+  Each problem comes in plain words with a one-click fix. On the starter beat, **Fix all** takes it from 33 to 94.
+- **Hum it.** Hum or sing a melody into the microphone, and BeatLab writes the notes into the piano roll, in the song's key and on the beat.
 - **Finished beats.** Auto mix balances the parts by loudness. Export gives WAV (16, 24 or 32-bit), MP3 at 320 kbps, MIDI for each part, stems, and a loudness report, with mastering to a target LUFS.
 - **Record.** Mic, MIDI keyboard, pads and the computer keyboard all play the selected sound and can record into patterns.
 
@@ -52,6 +65,32 @@ The `beatlab/` folder is the website. Every push to `main` republishes it throug
 
 Typed commands work instantly and offline. Smart mode downloads a roughly 1 GB model once. To turn it on, open the menu next to **Make a beat** and pick **Smart brain for anything it doesn't know**, or type "smart brain" after Ctrl+K. It needs WebGPU, which current Chrome and Edge have on most Windows PCs. After the first download, it runs offline.
 
+## How it's built
+
+```mermaid
+flowchart LR
+  you([You: mouse, keys, MIDI, voice]) --> ui[Studio UI<br/>app.js · ui.js]
+  ui --> brain[Brain<br/>intent.js rules · Qwen2.5 on WebGPU · Magenta]
+  brain -->|steps, one undo| ui
+  ui --> engine[Audio engine<br/>sound.js · Web Audio graph]
+  engine --> worklet[Audio thread<br/>dsp-worklet.js → dsp.js<br/>Time warp · Tune · Pitch · Transients]
+  engine --> render[Offline render<br/>same graph, faster than real time]
+  render --> doctor[Mix doctor<br/>doctor.js · FFT · 8 rules]
+  doctor -->|fixes| ui
+  mic([Microphone]) --> hum[hum.js<br/>YIN pitch → notes]
+  hum --> ui
+  render --> deliver[deliver.js<br/>LUFS · limiter · WAV · MP3 · MIDI]
+  server[(beatlab.py<br/>optional, on your PC)] -.->|FL packs, exports folder| ui
+```
+
+- **No build step and no framework:** plain ES modules, in any modern browser.
+- **The maths is separate from the browser.** The sample-by-sample DSP, the mix doctor, humming, the brain's language and the music engine are pure modules. The same code runs on the audio thread and in the Node tests.
+- **Live and offline sound the same.** Playback, exports, stems, auto mix and the mix doctor all render through one engine.
+- **Everything is local.**
+  - The AI runs in your browser: rules, Magenta, and an optional Qwen2.5 model on WebGPU.
+  - Beats are saved in IndexedDB on your computer.
+  - The only outside requests are Apple's song previews and the libraries' CDN.
+
 ## For developers
 
 No build step: plain ES modules, served by `beatlab.py` (Python standard library only).
@@ -60,7 +99,13 @@ No build step: plain ES modules, served by `beatlab.py` (Python standard library
 npm test
 ```
 
-That runs the unit tests: syntax checks for every module, the music engine, note tools, instrument zoning, and the brain's 55 phrasings.
+That runs the unit tests:
+- syntax checks for every module
+- the music engine, note tools and instrument zoning
+- the brain's 70 phrasings
+- the DSP, measured on test signals: half-time halves the pitch, Tune pulls a sharp A back to 220 Hz
+- every mix doctor rule, on mixes built with one known problem each
+- humming to notes
 
 ```bash
 npm run test:studio
@@ -83,6 +128,9 @@ That re-renders BeatLab's own sample library from its synths, into `beatlab/samp
 | `beatlab/instruments.js` | Sample instruments and kits, pitch detection |
 | `beatlab/intent.js`, `brain.js` | The brain: sentences to steps, Magenta, the local language model |
 | `beatlab/deliver.js` | Loudness, limiter, WAV, MP3, MIDI, zip |
+| `beatlab/dsp.js`, `dsp-worklet.js` | Sample-by-sample effects, and the AudioWorklet that runs them |
+| `beatlab/doctor.js` | The mix doctor: spectrum, the rules, the fixes |
+| `beatlab/hum.js` | Humming or singing to notes |
 | `beatlab/index.html`, `landing.js` | The landing page |
 
 

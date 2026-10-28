@@ -14,9 +14,27 @@ const CHROME = process.env.CHROME ?? ['C:/Program Files/Google/Chrome/Applicatio
 const OUT = `${S}/test`, PROFILE = `${S}/test-profile`, DL = `${S}/dl`;
 rmSync(PROFILE, { recursive: true, force: true });
 mkdirSync(OUT, { recursive: true }); mkdirSync(DL, { recursive: true });
+const HUM = `${S}/hum.wav`;  // the microphone: Chrome plays this file as its input
+{  // a hummed E G A B phrase, looping, 16-bit 48 kHz mono, 30 cents sharp with vibrato
+  const sr = 48000, beat = 60 / 87, notes = [64, 67, 69, 71, 69, 67], x = [];
+  let ph = 0;
+  for (let rep = 0; rep < 6; rep++) for (const m of notes) {
+    const n = Math.round(beat * sr);
+    for (let i = 0; i < n; i++) {
+      const env = Math.min(1, i / (0.02 * sr), (n - i) / (0.05 * sr)), f = 440 * 2 ** ((m + 0.3 - 69) / 12) * (1 + 0.006 * Math.sin(2 * Math.PI * 5 * i / sr));
+      ph += 2 * Math.PI * f / sr;
+      x.push(0.35 * env * (Math.sin(ph) + 0.35 * Math.sin(2 * ph) + 0.15 * Math.sin(3 * ph)));
+    }
+  }
+  const b = Buffer.alloc(44 + x.length * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + x.length * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(sr, 24); b.writeUInt32LE(sr * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(x.length * 2, 40);
+  x.forEach((v, i) => b.writeInt16LE(Math.round(v * 32767), 44 + i * 2));
+  writeFileSync(HUM, b);
+}
 const port = 9700 + Math.floor(Math.random() * 200);
 const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${PROFILE}`,
-  '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream',
+  '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream', `--use-file-for-fake-audio-capture=${HUM}`,
   '--hide-scrollbars', '--window-size=1920,1080', 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let targets;
@@ -774,6 +792,94 @@ await test('BeatLab kits in the desktop version', async () => {
   assert(okk, 'kit');
   const k = track(await saved(), 'kick');
   return `${k.inst.name}, ${k.inst.zones[0].takes.length} takes`;
+});
+const toasts = () => ev(`[...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | ')`);
+await test('audio-thread effects: Time warp, Tune, Pitch shifter and Transient shaper play', async () => {
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  await key('F9'); await sleep(400);
+  const strip = name => `[...document.querySelectorAll('.strip')].find(s => s.querySelector('.sname b')?.textContent === ${JSON.stringify(name)})`;
+  for (const [name, fx] of [['Hats', 'Time warp'], ['Melody', 'Tune'], ['Chords', 'Pitch shifter'], ['Kick', 'Transient shaper']]) {
+    await ev(`${strip(name)}.querySelector('.slot.empty').scrollIntoView({ block: 'center', inline: 'center' })`); await sleep(200);
+    await clickSel(`${strip(name)}.querySelector('.slot.empty')`); await menuPick(fx); await sleep(300);
+    await ev(`document.querySelector('#plugin').hidden = true`);  // adding an effect opens the channel's window over the mixer
+  }
+  const s = await saved(), has = (id, type) => track(s, id).fx.some(f => f.type === type);
+  assert(has('hat', 'warp') && has('melody', 'tune') && has('chords', 'pitch') && has('kick', 'transient'), JSON.stringify(s.tracks.map(t => [t.id, t.fx.map(f => f.type)])));
+  await key(' '); await sleep(3000); await key(' ');
+  return 'all four on their strips, played through the audio thread';
+});
+await test('Time warp window: stepped knobs name their settings', async () => {
+  await key('F6'); await sleep(300);
+  await clickSel(`document.querySelector('.rack .ch[data-ch=hat] .cbtn')`); await sleep(600);
+  const card = await ev(`[...document.querySelectorAll('#plugin .pcard')].find(c => c.textContent.includes('Time warp'))?.textContent ?? ''`);
+  assert(/Half-time/.test(card) && /Every 2nd bar/.test(card), card);
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  return 'Half-time, Every 2nd bar';
+});
+await test('brain: half-time and punch from one sentence, one undo', async () => {
+  const before = await saved();
+  await key('k', 2); await sleep(400); await type('half-time the snare on the last beat and punchier kick'); await sleep(500); await key('Enter');
+  assert(await until(`JSON.parse(localStorage.getItem('beatlab:v3')).song.tracks.find(t => t.id === 'snare').fx.some(f => f.type === 'warp' && f.mode === 0 && f.when === 2)`, 20000), 'no half-time on the snare');
+  assert(track(await saved(), 'kick').fx.some(f => f.type === 'transient' && f.attack === 0.8), 'no punch on the kick');
+  await key('z', 2); await sleep(800);
+  const back = await saved();
+  assert(track(back, 'snare').fx.length === track(before, 'snare').fx.length && track(back, 'kick').fx.length === track(before, 'kick').fx.length, 'one undo takes both back');
+  return 'warp on the snare, transient on the kick, both undone with one Ctrl+Z';
+});
+await test('acid bass: a channel plays a squelchy line with presets', async () => {
+  await key('F6'); await sleep(300);
+  await clickSel(`document.querySelector('.rack .ch[data-ch=bass] .cbtn')`); await sleep(600);
+  const synthBtn = `[...document.querySelectorAll('#plugin button')].find(b => /synth instead/i.test(b.textContent))`;
+  if (await ev(`!!${synthBtn}`)) { await clickSel(synthBtn); await sleep(400); }
+  await clickSel(`[...document.querySelectorAll('#plugin .picker')].find(p => p.title === 'Instrument')`); await menuPick('Acid bass'); await sleep(500);
+  assert(track(await saved(), 'bass').sound === 'acid', `sound ${track(await saved(), 'bass').sound}`);
+  await key(' '); await sleep(2000); await key(' ');
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  return `bass is ${track(await saved(), 'bass').sound}`;
+});
+await test('favourites: a starred plugin shows at the top of the browser', async () => {
+  await clickSel('[data-layout=daw]'); await sleep(1200);
+  await clickSel('[data-btab=plugins]'); await sleep(300);
+  await ev(`(() => { const q = document.querySelector('#browser-q'); q.value = 'tune'; q.dispatchEvent(new Event('input')); return 1; })()`); await sleep(300);
+  const star = `[...document.querySelectorAll('#browser-body li')].find(l => l.textContent.startsWith('Tune'))?.querySelector('.star')`;
+  await ev(`${star}.scrollIntoView({ block: 'center' })`);
+  await clickSel(star); await sleep(300);
+  await ev(`(() => { const q = document.querySelector('#browser-q'); q.value = ''; q.dispatchEvent(new Event('input')); return 1; })()`); await sleep(300);
+  const top = await ev(`[...document.querySelectorAll('#browser-body li')].slice(0, 2).map(l => l.textContent.trim().slice(0, 12)).join(' / ')`);
+  assert(/^Favourites \/ Tune/.test(top), top);
+  await clickSel('[data-layout=rig]'); await sleep(800);
+  return top;
+});
+await test('mix doctor: names the problems, and Fix all raises the score', async () => {
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  assert(await until(`!document.querySelector('#make').disabled`, 120000), 'busy');
+  await key('F9'); await sleep(400);
+  await clickSel(`[...document.querySelectorAll('#dock-tools .btn, .fwin[data-win=mixer] .ftools .btn')].find(b => b.textContent.trim() === 'Mix doctor')`);
+  assert(await until(`!!document.querySelector('#dlg .doc-score')`, 120000), `no report: ${await toasts()}`);
+  const first = +(await ev(`document.querySelector('#dlg .doc-score b').textContent`)), n = await ev(`document.querySelectorAll('#dlg .doc-issue').length`);
+  const titles = await ev(`[...document.querySelectorAll('#dlg .doc-issue b')].map(b => b.textContent).join('; ')`);
+  if (!n) { await ev(`document.querySelector('#dlg').close(); 1`); return `score ${first}, nothing to fix`; }
+  await clickSel(`[...document.querySelectorAll('#dlg button')].find(b => /^Fix (all|it)/.test(b.textContent.trim()))`);
+  assert(await until(`/from/.test(document.querySelector('#dlg .doc-head p')?.textContent ?? '')`, 180000), 'never re-checked');
+  const second = +(await ev(`document.querySelector('#dlg .doc-score b').textContent`));
+  assert(second > first, `score ${first} -> ${second}`);
+  await ev(`document.querySelector('#dlg').close(); 1`);
+  return `${first} -> ${second}; found: ${titles}`;
+});
+await test('hum: a hummed phrase becomes melody notes in the key', async () => {
+  assert(await until(`!document.querySelector('#make').disabled`, 120000), 'busy');
+  await key('F6'); await sleep(300);
+  await clickSel(`document.querySelector('.rack .ch[data-ch=melody] .cbtn')`); await sleep(500);  // humming goes to the selected channel
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  await key('k', 2); await sleep(400); await type('key of E minor'); await sleep(400); await key('Enter'); await sleep(800);  // the hummed notes are E G A B
+  const before = track(await saved(), 'melody');
+  await key('k', 2); await sleep(400); await type('let me hum a melody'); await sleep(400); await key('Enter');
+  assert(await until(`/Wrote [0-9]+ notes/.test([...document.querySelectorAll('.toast')].map(t => t.textContent).join(' '))`, 90000), `no notes: ${await toasts()}`);
+  const pid = await ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui.pattern`), notes = track(await saved(), 'melody')[pid];
+  const pcs = [...new Set(notes.map(n => n.p % 12))].sort((a, b) => a - b);
+  assert(notes.length >= 4 && pcs.every(pc => [4, 7, 9, 11].includes(pc)), `hummed E G A B, heard ${pcs} in ${notes.length} notes`);
+  assert(JSON.stringify(notes) !== JSON.stringify(before[pid]), 'the melody changed');
+  return `${notes.length} notes, pitch classes ${pcs.join(' ')}`;
 });
 
 await test('help and white studio', async () => {

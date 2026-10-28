@@ -103,5 +103,10 @@
    sounds, exports as one zip), a README with credits and licences, and the test suites in the repo.
    **Website, the whole studio (2026-10-28):** song search asks Apple directly (no server), and Connect
    FL Studio reads the visitor's own Packs folder in the browser, so FL instruments and kits work online.
-5. **Depth:** an AudioWorklet engine for lower CPU, sends between inserts, ghost channels, and more of
-   FL's long tail.
+   **Hackathon round (2026-10-28):** an AudioWorklet DSP engine (dsp.js, measured by test_dsp.mjs) with Time
+   warp (half-time, stutter, tape stop, reverse, locked to the bar), Tune (YIN pitch to the song's key), a
+   pitch shifter and a transient shaper; an acid bass; favourites; the mix doctor (doctor.js: eight measured
+   rules, a score out of 100, one-click fixes; the starter beat goes from 33 to 94); humming to notes
+   (hum.js); the brain learned the new effects, the doctor and humming (70 phrasings).
+5. **Depth:** every synth voice on the audio thread for lower CPU, sends between inserts, ghost channels,
+   collaboration from a shared link, a brain that learns from your past beats, and more of FL's long tail.
