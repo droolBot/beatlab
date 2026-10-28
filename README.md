@@ -1,5 +1,8 @@
 # BeatLab
 
+<img width="1904" height="963" alt="image" src="https://github.com/user-attachments/assets/7c8f4335-b497-46f7-8adf-a6e1f2ab3fa5" />
+
+
 A free beat studio that runs in your browser and works the way FL Studio works: patterns in a channel rack and piano roll, painted onto a playlist, mixed on a mixer, exported as WAV, MP3 and MIDI. It also comes with its own brain that makes and edits beats from plain sentences, running on your own computer with no account and no AI bill.
 
 ![BeatLab in Rig layout](beatlab/media/rig.webp)
