@@ -92,6 +92,24 @@
   .tab:hover, .tab:focus-visible { color: var(--paper); outline: none; }
   .loading { z-index: 12; left: 50%; top: 50%; transform: translate(-50%, -50%); font: var(--label); text-transform: uppercase; transition: opacity 300ms; }
 
+
+  /* the intro's captions: what each stretch of the tape is showing */
+  .story { z-index: 13; left: 50%; bottom: 13.5vh; transform: translateX(-50%); width: min(500px, 86vw); margin: 0; padding: 12px 16px 13px; text-align: center; border: 1.5px solid var(--ink); border-radius: 14px; background: rgba(166,174,146,0.92); font: 500 clamp(14px, 1.02vw, 17px)/1.42 'Space Grotesk', sans-serif; opacity: 0; pointer-events: none; }
+  .story b { display: block; margin-bottom: 4px; font: 600 11px/1 'IBM Plex Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+
+  /* the brain, and the phone */
+  .brainsec .head, .pocket .head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 5vw; align-items: end; margin-bottom: 6vh; }
+  .trio3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .trio3 article { display: grid; gap: 14px; align-content: start; padding: 26px; border: 1.5px solid var(--ink); border-radius: 18px; }
+  .trio3 h3 { margin: 0; font: 600 clamp(20px, 1.6vw, 27px)/1.22 'Space Grotesk', sans-serif; letter-spacing: -0.01em; }
+  .trio3 .score { font: 400 clamp(60px, 6vw, 100px)/0.9 Anton, 'Arial Narrow', sans-serif; letter-spacing: 0.01em; }
+  .trio3 .score i { font-style: normal; color: var(--orange); }
+  .trio3 p { margin: 0 !important; color: var(--ink-2); }
+  .phones { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+  .phones figure { display: grid; gap: 12px; justify-items: center; margin: 0; }
+  .phones img { width: 100%; max-width: 270px; aspect-ratio: 390 / 844; object-fit: cover; border: 6px solid var(--ink); border-radius: 30px; background: #111; box-shadow: 0 40px 70px -36px rgba(23,26,18,0.8); }
+  .phones figcaption { font: 600 12px/1.3 'IBM Plex Mono', monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); text-align: center; }
+
   /* ---------- the page ---------- */
   .nav { position: fixed; z-index: 50; left: 50%; top: 14px; display: flex; align-items: center; gap: 4px; padding: 5px 5px 5px 14px; border-radius: 999px; background: rgba(166,174,146,0.82); backdrop-filter: blur(10px) saturate(1.2); border: 1.5px solid var(--ink); font: var(--label); text-transform: uppercase; translate: -50% -160%; transition: translate .6s var(--ease); }
   .nav.on { translate: -50% 0; }
@@ -252,15 +270,25 @@
   @media (max-width: 1100px) {
     .numbers { grid-template-columns: repeat(3, 1fr); row-gap: 5vh; }
     .keyboard { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .phones { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 5vh; }
     .foot .cols { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 760px) {
+    .tape { height: 760vh; }
+    .story { bottom: 16vh; }
+    .nav { padding: 4px 4px 4px 12px; } .nav b { font-size: 16px; margin-right: 2px; } .nav a { padding: 8px 10px; white-space: nowrap; font-size: 13px; }
+    .page section { padding-block: 10vh; }
+    .step { opacity: 1; min-height: auto; padding-block: 5vh; }
+    .brainsec .head, .pocket .head { grid-template-columns: 1fr; gap: 0; }
+    .trio3 { grid-template-columns: 1fr; }
+    .phones { grid-template-columns: repeat(4, 64vw); overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -4vw; padding: 0 4vw 14px; scrollbar-width: none; }
+    .phones figure { scroll-snap-align: center; }
     .tl > :nth-child(n+2), .tr > :first-child, .swoosh, .pct, .dimv, .bl, .br { display: none; }
     .marquee .word { font-size: 26vh; }
     .finale a { font-size: 17vw; }
     .nav { gap: 0; padding-left: 10px; } .nav a:not(.go, .docs) { display: none; }
     .features { display: flex; flex-direction: column; }
-    .screen-wrap { order: -1; top: 64px; height: auto; z-index: 3; padding-block: 8px; background: var(--paper); }
+    .screen-wrap { order: -1; top: 0; height: auto; z-index: 3; padding: 70px 0 8px; background: var(--paper); }  /* covers the strip under the nav too */
     .step { min-height: 70vh; }
     .compare .head, .plugins .head, .keys .head { grid-template-columns: 1fr; gap: 0; }
     .numbers { grid-template-columns: repeat(2, 1fr); }
@@ -301,6 +329,7 @@
   <span class="dimv" id="dim-tr" aria-hidden="true"></span><span class="dimv" id="dim-trv" aria-hidden="true"></span>
   <span class="strip-label" id="strip-label" aria-hidden="true">Fast, local, free</span>
   <p class="lede" id="lede"><b>A free beat studio that runs on your computer.</b><br>It works the way FL Studio works, and it writes ideas with you.</p>
+  <p class="story" id="story"></p>
   <div class="tag" id="tag"><b id="tag-time">00:00:00</b><i>REC</i><small>A trap beat BeatLab just wrote and rendered, here in your browser</small><button id="hear" disabled><span>wav ◉ 44.1k</span><b>▶</b></button></div>
   <div class="unpacked" id="unpacked"><p>Unpacked</p><h2>Five windows. One studio.</h2></div>
   <a class="tab" id="tab" href="studio.html">—— Open studio ——</a>
@@ -363,6 +392,30 @@
     </div>
   </section>
 
+  <section class="brainsec wrap" id="brain" aria-label="Its own brain">
+    <div class="head">
+      <div><p class="kick rise">Its own brain</p><h2 class="rise">It helps.<br>You decide.</h2></div>
+      <p class="rise">Everything the brain does is an ordinary edit you can see, change and undo with one Ctrl+Z. It runs on your own computer, so there’s no account and no AI bill.</p>
+    </div>
+    <div class="trio3">
+      <article class="rise">
+        <p class="kick">Ask in words</p>
+        <h3>“Half-time the hats on the last beat and a punchier kick.”</h3>
+        <p>Type what you want and BeatLab shows its plan before doing it. It understands tempo, key, parts, effects and the mix, and a small free AI model can rewrite anything else into a plan.</p>
+      </article>
+      <article class="rise">
+        <p class="kick">Hum it</p>
+        <h3>Hum the hook. It’s in the piano roll.</h3>
+        <p>BeatLab hears each note, cuts them where your syllables change, and snaps them to the song’s key and the beat, in the right octave for the part.</p>
+      </article>
+      <article class="rise">
+        <p class="kick">The mix doctor</p>
+        <p class="score">33 <i>→</i> 94</p>
+        <p>It listens to your beat part by part, names each problem in plain words, like the kick fighting the 808, and fixes it in one click. That’s the starter beat, before and after.</p>
+      </article>
+    </div>
+  </section>
+
   <section class="compare wrap" id="layouts">
     <div class="head">
       <div><p class="kick rise">Two ways to work</p><h2 class="rise">Rig or DAW.<br>Switch any time.</h2></div>
@@ -373,6 +426,19 @@
       <img class="top" src="media/rig.webp" alt="BeatLab in the Rig layout: the playlist on one big screen above the brain, the pads and the turntable" loading="lazy">
       <span class="handle"></span><span class="lbl l">Rig</span><span class="lbl r">DAW</span>
       <input type="range" min="0" max="100" value="50" id="cmp-x" aria-label="Compare the Rig and DAW layouts">
+    </div>
+  </section>
+
+  <section class="pocket wrap" id="phone" aria-label="On your phone">
+    <div class="head">
+      <div><p class="kick rise">On your phone</p><h2 class="rise">A pocket<br>studio.</h2></div>
+      <p class="rise">Open BeatLab on a phone and it becomes one screen at a time, with big buttons for your thumbs. Song, Beat, Keys and Mix are a tap apart. Make holds the brain, the drum pads, humming and the mix doctor. It’s the same studio and the same project.</p>
+    </div>
+    <div class="phones">
+      <figure class="rise"><img src="media/phone-song.webp" alt="BeatLab on a phone: the song's playlist with clips on tracks, and the tab bar" loading="lazy"><figcaption>Song</figcaption></figure>
+      <figure class="rise"><img src="media/phone-beat.webp" alt="BeatLab on a phone: the step sequencer with kick, snare and hats" loading="lazy"><figcaption>Beat</figcaption></figure>
+      <figure class="rise"><img src="media/phone-mix.webp" alt="BeatLab on a phone: mixer strips with faders and knobs" loading="lazy"><figcaption>Mix</figcaption></figure>
+      <figure class="rise"><img src="media/phone-make.webp" alt="BeatLab on a phone: the brain, Make a beat and quick buttons for humming and the mix doctor" loading="lazy"><figcaption>Make</figcaption></figure>
     </div>
   </section>
 
@@ -433,7 +499,8 @@
     <details><summary>Do I need the internet?</summary><p>Only to load the app the first time and, if you switch them on, the AI models. Your beats never leave your computer.</p></details>
     <details><summary>Where are my beats saved?</summary><p>In your browser's storage on this computer, saved as you work, with named versions you can go back to. Save a project file any time to back a beat up or move it to another computer.</p></details>
     <details><summary>Can I use my own samples?</summary><p>Yes. Drop a WAV or MP3 onto any channel or straight onto the playlist. If FL Studio is installed, BeatLab can play its sample packs too.</p></details>
-    <details><summary>What do I need?</summary><p>Windows and Chrome or Edge. A MIDI keyboard and a microphone work if you have them, and the computer keyboard plays notes if you don't.</p></details>
+    <details><summary>What do I need?</summary><p>Chrome or Edge on a computer, or the browser on your phone. A MIDI keyboard and a microphone work if you have them, and the computer keyboard plays notes if you don't.</p></details>
+    <details><summary>Does it work on my phone?</summary><p>Yes. On a phone the studio shows one screen at a time with a tab bar at the bottom: Song, Beat, Keys, Mix and Make. Plugin windows open full screen and menus slide up from the bottom. Headphones help when you hum or record.</p></details>
   </section>
 </main>
 

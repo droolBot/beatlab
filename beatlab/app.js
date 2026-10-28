@@ -24,7 +24,10 @@ const $ = sel => $doc(sel) ?? Object.values(V).map(v => v.body.querySelector(sel
 
 const PIANO_RANGE = { bass: [24, 60], chords: [43, 84], melody: [55, 96] };
 const PATTERN_COLOR = { A: '#FF5E1A', B: '#8F8F8F' };
-const ROW = 40, HDR = 210;  // match --row and --hdr in studio.html
+// A phone gets its own layout (studio.html, html.phone): a tab bar, one view at a time, a narrower track column
+const PHONE = matchMedia('(max-width: 1279px)');  // phones, tablets and small laptops: the full studio needs about 1280 px
+let phone = PHONE.matches;
+const ROW = 40, hdr = () => (phone ? 112 : 210);  // match --row in studio.html
 const VIEWS = { arrange: ['playlist', 'Playlist', 'F5'], rack: ['rack', 'Channel rack', 'F6'], roll: ['piano', 'Piano roll', 'F7'], mixer: ['mixer', 'Mixer', 'F9'], master: ['master', 'Master', ''], sounds: ['sounds', 'Browser', 'F8'], listen: ['listen', 'Listen', ''] };
 const MASTER_DEFAULT = { glue: 0.5, width: 1, ceiling: -1 };
 const HINT = 'Hover over anything to see what it does. Ctrl+K finds any action.';
@@ -1384,10 +1387,10 @@ function renderPlaylist() {
     h('button', { class: 'btn small', title: 'Import audio files at the song position, or drop them on a track', onclick: () => pickAudioFile() }, icon('upload', 14), 'Audio'),
     h('div', { class: 'seg' }, h('button', { title: 'Zoom out (Ctrl + scroll)', 'aria-label': 'Zoom out', onclick: () => zoomPlaylist(1 / 1.4) }, '−'), h('button', { title: 'Zoom in (Ctrl + scroll)', 'aria-label': 'Zoom in', onclick: () => zoomPlaylist(1.4) }, '+')));
   const pl = host.body, len = songLength(song) / BAR, total = Math.max(32, len + 16);
-  barWidth = Math.max(5, Math.round(Math.max(12, Math.floor((pl.clientWidth - HDR - 14) / Math.max(8, len + 2))) * (ui.plZoom ?? 1)));
+  barWidth = Math.max(5, Math.round(Math.max(12, Math.floor((pl.clientWidth - hdr() - 14) / Math.max(8, len + 2))) * (ui.plZoom ?? 1)));
   const bw = barWidth, W = total * bw, n = rows.length + lanes.length;
   rowH = clamp(Math.floor((pl.clientHeight - ROW - 24) / Math.min(n, 11)), 34, 58);  // about eleven tracks fill the screen, the rest scroll
-  const inner = h('div', { class: 'pl-inner', style: `grid-template-columns:${HDR}px ${W}px; grid-template-rows:${ROW - 4}px 24px repeat(${n}, ${rowH}px) minmax(0, 1fr)` });
+  const inner = h('div', { class: 'pl-inner', style: `grid-template-columns:${hdr()}px ${W}px; grid-template-rows:${ROW - 4}px 24px repeat(${n}, ${rowH}px) minmax(0, 1fr)` });
   const marks = (song.markers ?? []).map((m, i) => h('button', { class: 'marker', style: `--pc:var(--muted);left:${m.t / BAR * bw + 2}px;max-width:${Math.max(40, ((song.markers[i + 1]?.t ?? m.t + 8 * BAR) - m.t) / BAR * bw - 4)}px`, title: `${m.name}. Click to rename, move or delete it`, onclick: e => markerMenu(e.currentTarget, m) }, h('span', { class: 'swatch' }), h('span', {}, m.name)));
   const ruler = [];
   for (let b = 0; b < total; b++) {
@@ -1416,7 +1419,7 @@ function renderPlaylist() {
     h('canvas', { class: 'lane auto', 'data-id': id, 'data-lane': lane, style: `width:${W}px;height:${rowH}px`, title: 'Click to add a point, drag to move it, right-click to delete it' }));
   }
   inner.append(h('div', { class: 'thead', style: 'cursor:default' }), h('div', { style: `background-image:repeating-linear-gradient(90deg, ${pal().grid} 0 1px, transparent 1px ${bw}px)` }),
-    h('div', { class: 'playhead', id: 'pl-head', hidden: ui.mode !== 'song', style: `left:${HDR + ui.cursor / BAR * bw}px` }),
+    h('div', { class: 'playhead', id: 'pl-head', hidden: ui.mode !== 'song', style: `left:${hdr() + ui.cursor / BAR * bw}px` }),
     h('div', { class: 'selbox', id: 'pl-box', hidden: true }));
   const keepX = pl.scrollLeft, keepY = pl.scrollTop;
   pl.replaceChildren(inner);
@@ -1717,7 +1720,7 @@ function dragBox(e) {  // a box round clips selects them, across tracks
   const move = ev => {
     const x1 = ev.clientX - r0.left, y1 = ev.clientY - r0.top, l = Math.min(x0, x1), t = Math.min(y0, y1), w = Math.abs(x1 - x0), hh = Math.abs(y1 - y0);
     Object.assign(box.style, { left: `${l}px`, top: `${t}px`, width: `${w}px`, height: `${hh}px` });
-    const tA = (l - HDR) / barWidth * BAR, tB = (l + w - HDR) / barWidth * BAR, rA = Math.floor((t - top) / rowH), rB = Math.floor((t + hh - top) / rowH);
+    const tA = (l - hdr()) / barWidth * BAR, tB = (l + w - hdr()) / barWidth * BAR, rA = Math.floor((t - top) / rowH), rB = Math.floor((t + hh - top) / rowH);
     plSel = new Set(song.playlist.clips.filter(c => c.row >= rA && c.row <= rB && c.t < tB && c.t + clipTicks(c) > tA).map(c => c.id));
     drawPlaylist();
   };
@@ -1878,6 +1881,7 @@ function select(id) {
   renderBrowser();
 }
 function showView(v) {
+  ui.pview = null;  // a phone leaves the Make tab
   if (ui.layout === 'daw') return v === 'arrange' ? frontWin(null) : v === 'sounds' ? showBrowser('sounds') : openWin(v, true);
   ui.view = v;
   ui.focus = v;
@@ -1896,6 +1900,7 @@ function renderView() {
   put($('.display-body'), v.body);
   RENDER[ui.view]();
   lastStep = -1;
+  markPhoneTab();
 }
 
 // The DAW layout: the playlist fills the desktop, the other editors float above it where you left them
@@ -2863,7 +2868,7 @@ function frame() {
     now = player.counting ? -1 : step;
     if (now !== lastStep) { markStep(now); lastStep = now; }
     const head = $('#pl-head');
-    if (head && ui.mode === 'song') head.style.left = `${HDR + tick / BAR * barWidth}px`;
+    if (head && ui.mode === 'song') head.style.left = `${hdr() + tick / BAR * barWidth}px`;
     const rh = $('#roll-head');
     if (rh) { rh.hidden = ui.mode !== 'pattern'; rh.style.left = `calc(60px + (100% - 60px) * ${tick / (patBars() * BAR)})`; }
     if (showing('mixer')) drawMeters();
@@ -3259,6 +3264,51 @@ async function cleanUpAudio() {
   toast(gone.length ? `Removed ${gone.length} recording${gone.length === 1 ? '' : 's'} no project uses any more.` : 'Every stored recording is still used by a project.');
 }
 
+
+// ---------- phones: Song, Beat, Keys and Mix are the screen's views; Make is the Brain, quick actions and pads ----------
+const PHONE_TABS = [['arrange', 'playlist', 'Song'], ['rack', 'rack', 'Beat'], ['roll', 'piano', 'Keys'], ['mixer', 'mixer', 'Mix'], ['make', 'brain', 'Make']];
+function markPhoneTab() {
+  const tab = ui.pview === 'make' ? 'make' : ui.view, lit = ['master', 'sounds', 'listen'].includes(tab) ? 'make' : tab;  // those open from Make
+  document.documentElement.dataset.pview = tab;
+  for (const b of document.querySelectorAll('#tabbar button')) b.setAttribute('aria-current', b.dataset.tab === lit ? 'page' : 'false');
+}
+function phoneTab(tab) {
+  if (tab !== 'make') return showView(tab);
+  ui.pview = 'make';
+  save();
+  markPhoneTab();
+}
+function applyPhone() {
+  phone = PHONE.matches;
+  document.documentElement.classList.toggle('phone', phone);
+  if (phone && ui.layout === 'daw') { ui.layout = 'rig'; save(); applyLayout(); }
+  else renderView();
+}
+function moreMenu() {
+  menu($('#more'), [
+    { label: 'Projects', icon: 'folder', onSelect: () => $('#project').click() },
+    { label: 'Find any action', icon: 'search', onSelect: openPalette },
+    { label: 'Redo', icon: 'redo', onSelect: () => stepHistory(1) },
+    { label: `Metronome ${ui.metro ? 'off' : 'on'}`, icon: 'metro', onSelect: toggleMetro },
+    { label: 'Audio and MIDI settings', icon: 'midi', onSelect: settingsDialog },
+    { label: 'Dark or white studio', icon: 'sun', onSelect: () => $('#theme').click() },
+    { label: 'Shortcuts and help', icon: 'help', onSelect: openHelp },
+    { label: 'BeatLab docs', icon: 'help', onSelect: () => window.open('docs.html', '_blank', 'noopener') },
+  ]);
+}
+function initPhone() {
+  $('#tabbar').replaceChildren(...PHONE_TABS.map(([tab, ic, label]) => h('button', { 'data-tab': tab, onclick: () => phoneTab(tab) }, icon(ic, 22), h('span', {}, label))));
+  $('#quick-grid').replaceChildren(...[
+    ['brain', 'Ask the brain', askBrain], ['mic', 'Hum it', startHum], ['brain', 'Mix doctor', () => withBusy(() => mixDoctor())], ['mixer', 'Auto mix', () => withBusy(() => autoMix())],
+    ['sounds', 'Sounds', () => showView('sounds')], ['listen', 'Listen', () => showView('listen')], ['master', 'Master', () => showView('master')], ['export', 'Export', () => openExport()],
+  ].map(([ic, label, run]) => h('button', { class: 'btn', onclick: run }, icon(ic, 18), label)));
+  $('#more').replaceChildren(icon('more', 18));
+  $('#more').addEventListener('click', moreMenu);
+  PHONE.addEventListener('change', applyPhone);
+  document.documentElement.classList.toggle('phone', phone);
+  markPhoneTab();
+}
+
 // ---------- help, command palette, keys, MIDI ----------
 function openHelp() {
   openDialog({ title: 'Shortcuts and help', glyph: 'help', body: [
@@ -3509,6 +3559,7 @@ function staticChrome() {  // icons and labels that never change
   label($('#brain-title'), 'brain', 'Brain');
   label($('#pads-title'), 'pads', 'Pads');
   label($('#deck-title'), 'record', 'Turntable');
+  initPhone();
   $('#export').replaceChildren(icon('export', 16), 'Export');
   $('#export').title = 'Save MIDI, WAV and MP3 files for FL Studio (Ctrl+E)';
   $('#play').replaceChildren(icon('play', 18));
@@ -3580,7 +3631,7 @@ async function init() {
   pl.addEventListener('drop', e => {
     if (!e.dataTransfer.files.length) return;
     e.preventDefault();
-    const r = pl.getBoundingClientRect(), tick = Math.max(0, Math.round((e.clientX - r.left + pl.scrollLeft - HDR) / barWidth * 4) * PPQ);
+    const r = pl.getBoundingClientRect(), tick = Math.max(0, Math.round((e.clientX - r.left + pl.scrollLeft - hdr()) / barWidth * 4) * PPQ);
     const lane = e.target.closest('.lane.audio'), t = lane ? track(lane.dataset.id) : null;
     [...e.dataTransfer.files].reduce((p, f) => p.then(() => importAudio(f, t, tick)), Promise.resolve());
   });

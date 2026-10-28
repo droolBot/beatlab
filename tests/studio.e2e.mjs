@@ -881,6 +881,48 @@ await test('hum: a hummed phrase becomes melody notes in the key', async () => {
   assert(JSON.stringify(notes) !== JSON.stringify(before[pid]), 'the melody changed');
   return `${notes.length} notes, pitch classes ${pcs.join(' ')}`;
 });
+// On a phone: Chrome emulates a 390 x 844 touch phone, then goes back to the desktop for the tests after
+const asPhone = async on => {
+  await send('Emulation.setDeviceMetricsOverride', on ? { width: 390, height: 844, deviceScaleFactor: 2, mobile: true } : { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setTouchEmulationEnabled', { enabled: on, maxTouchPoints: on ? 5 : 1 });
+  await send('Page.reload', {});
+  for (let i = 0; i < 60 && !(await ev(`document.querySelectorAll('#pl .lane.row').length > 0`).catch(() => false)); i++) await sleep(500);
+  await sleep(2500);
+};
+const sideways = () => ev(`document.documentElement.scrollWidth > innerWidth`);
+await asPhone(true);
+await test('phone: the studio becomes tabs, one screen at a time, nothing sideways', async () => {
+  assert(await ev(`document.documentElement.classList.contains('phone')`), 'no phone layout');
+  assert(await ev(`document.querySelectorAll('#tabbar button').length === 5 && document.querySelector('#tabbar').getBoundingClientRect().bottom <= innerHeight + 1`), 'no tab bar at the bottom');
+  const seen = [];
+  for (const tab of ['arrange', 'rack', 'roll', 'mixer', 'make']) {
+    await clickSel(`#tabbar [data-tab=${tab}]`); await sleep(500);
+    assert(await ev(`document.documentElement.dataset.pview`) === tab, `tab ${tab} shows ${await ev(`document.documentElement.dataset.pview`)}`);
+    assert(!(await sideways()), `${tab} scrolls sideways`);
+    seen.push(tab);
+  }
+  assert(await ev(`(() => { const m = document.querySelector('#make').getBoundingClientRect(); return m.height > 30 && m.top >= 0 && m.bottom < innerHeight; })()`), 'Make a beat is not on screen in the Make tab');
+  return `tabs ${seen.join(', ')}, all 390 wide`;
+});
+await test('phone: Make a beat from the Make tab, and a channel opens full screen', async () => {
+  assert(await until(`!document.querySelector('#make').disabled`, 120000), 'busy');
+  await clickSel('#make');
+  assert(await until(`/New .* beat/.test([...document.querySelectorAll('.toast')].map(t => t.textContent).join(' ')) && !document.querySelector('#make').disabled`, 120000), 'no new beat');
+  await clickSel('#tabbar [data-tab=rack]'); await sleep(500);
+  await clickSel(`document.querySelector('.rack .ch[data-ch=kick] .cbtn')`); await sleep(700);
+  const win = await ev(`(() => { const r = document.querySelector('#plugin').getBoundingClientRect(); return { open: !document.querySelector('#plugin').hidden, w: Math.round(r.width), h: Math.round(r.height) }; })()`);
+  assert(win.open && win.w === 390 && win.h >= 840, `window ${JSON.stringify(win)}`);
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  return `a new beat, then the kick's window at ${win.w} x ${win.h}`;
+});
+await test('phone: menus slide up from the bottom', async () => {
+  await clickSel('#more'); await sleep(400);
+  const m = await ev(`(() => { const r = document.querySelector('.menu').getBoundingClientRect(); return { w: Math.round(r.width), gap: Math.round(innerHeight - r.bottom), items: document.querySelectorAll('.menu .menu-item').length }; })()`);
+  assert(m.w >= 370 && m.gap <= 16 && m.items >= 6, JSON.stringify(m));
+  await key('Escape'); await sleep(300);
+  return `${m.items} items, ${m.w} wide, ${m.gap} px from the bottom`;
+});
+await asPhone(false);
 
 await test('help and white studio', async () => {
   await key('F1'); await sleep(300);

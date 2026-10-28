@@ -226,6 +226,7 @@
   .brain-screen .lcd.big { height: 96px; width: 92px; padding: 0 10px; }
   .brain-screen .lcd.big b { font-size: 44px; }
   .k3d { width: 104px; height: 96px; cursor: ns-resize; touch-action: none; border-radius: 12px; justify-self: center; }
+  .k3d canvas { display: block; width: 100%; height: 100%; }  /* the drawing buffer is device pixels; this keeps it the box's size on any screen */
   .brain-knobs { display: grid; gap: 8px; align-content: center; min-width: 0; }
   .style-name { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: 42px; padding: 0 10px 0 12px; border-radius: 10px; }
   .style-name b { font-weight: 500; font-size: 14px; }
@@ -557,9 +558,89 @@
   @media (max-width: 2100px) { .search span, .search kbd { display: none; } }
   @media (max-width: 1700px) { .devices { grid-template-columns: 540px minmax(0, 1fr) auto; } .brain-body { column-gap: 14px; padding: 2px 14px 14px; } .opt { font-size: 11.5px; gap: 6px; } #meter-unit { display: none; } }
   @media (max-width: 1600px) { .search span, .search kbd { display: none; } .seg button[aria-selected=false] .view-label { display: none; } .top { gap: 9px; } .patpick .picker { min-width: 128px; } }
+  /* narrower desktops: the top bar keeps everything on one line */
+  @media (max-width: 1500px) { .top { gap: 8px; padding-inline: 12px; } .brand b { display: none; } }
+  @media (max-width: 1400px) { #typing, #midi { display: none; } #export { font-size: 0; width: 44px; padding: 0 !important; justify-content: center; } }
   @media (max-width: 1440px) { .proj small, .menubar .hint { display: none; } :root { --deck-h: 260px; } .padgrid { gap: 6px; } .top { gap: 10px; } }
   @media (max-width: 1320px) { .brand b { display: none; } .devices { grid-template-columns: 540px minmax(0, 1fr); } .devices .deck { display: none; } }
   @media (max-height: 900px) { :root { --deck-h: 250px; --gap: 10px; } .window { grid-template-rows: 44px minmax(0, 1fr); } .top { padding: 7px 14px; } .lcd, .tkey { height: 36px; } .brain-body { row-gap: 8px; } .brain-screen .lcd.big, .k3d { height: 84px; } .make, .newpart, .style-name, .opt { height: 38px; } }
+
+  /* ---------- phones: one view at a time, a tab bar at the bottom, the Brain and pads under Make ---------- */
+  .tabbar, #more, .quick { display: none; }
+  html.phone, html.phone body { height: 100dvh; }
+  html.phone body { grid-template-rows: auto minmax(0, 1fr) auto; }
+  html.phone .menubar, html.phone .status, html.phone #browser, html.phone #desktop, html.phone .deck, html.phone #devices-toggle,
+  html.phone .display .wtitle > .seg, html.phone .display .wtitle > .grow { display: none !important; }
+  html.phone .top { margin: 0; border-radius: 0; border-width: 0 0 1px; flex-wrap: wrap; gap: 8px 6px; padding: calc(8px + env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px)); }
+  html.phone .top::before { content: ''; order: 5; flex-basis: 100%; height: 0; }
+  html.phone .top > * { order: 1; }
+  html.phone .top .readout:has(.mode), html.phone .top .readout:has(#key-pick), html.phone .top .readout:has(#pat-pick), html.phone #export { order: 6; }
+  html.phone .top .legend, html.phone .brand, html.phone .proj, html.phone #redo, html.phone #stop, html.phone #metro, html.phone #meter-unit, html.phone #cmd, html.phone #typing, html.phone #midi, html.phone #help, html.phone #theme, html.phone #master-k, html.phone .top > .grow { display: none; }
+  html.phone .top .readout { gap: 0; }
+  html.phone .transport { gap: 6px; }
+  html.phone .tkey { width: 40px; height: 40px; }
+  html.phone .lcd { height: 40px; }
+  html.phone .lcd.clock { min-width: 0; padding: 0 8px; }
+  html.phone .tempo { min-width: 0; padding: 0 8px; }
+  html.phone #more { display: grid; place-items: center; margin-left: auto; width: 40px; height: 40px; }
+  html.phone #export { height: 40px !important; width: 44px; padding: 0 !important; justify-content: center; font-size: 0; margin-left: auto; }  /* the icon alone; Play stops too */
+  html.phone .top .readout:has(#pat-pick) { flex: 1 1 0; min-width: 0; }
+  html.phone .top .readout:has(#pat-pick) .picker { width: 100%; min-width: 0; }
+
+  html.phone main.rig { grid-template-rows: minmax(0, 1fr); gap: 8px; padding: 8px max(8px, env(safe-area-inset-right, 0px)) 8px max(8px, env(safe-area-inset-left, 0px)); }
+  html.phone main.rig .devices { display: none; }
+  html.phone[data-pview=make] main.rig .display { display: none; }
+  html.phone[data-pview=make] main.rig .devices { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; }
+  html.phone[data-pview=make] .quick { display: grid; }
+  html.phone .devices .window { flex: none; grid-template-rows: auto auto; }  /* sized by what's in them, side by side or stacked */
+  html.phone .devices .wtitle { min-height: 44px; flex-wrap: wrap; padding-block: 6px; }
+  html.phone .brain-body { grid-template-columns: minmax(0, 1fr); padding: 2px 14px 14px; }
+  html.phone .brain-screen { grid-template-columns: 92px 104px; justify-content: space-between; }
+  html.phone .padgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: auto; padding: 2px 12px 12px; }
+  html.phone .bigpad { aspect-ratio: 1; }
+  .quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 12px 12px; }
+  .quick-grid .btn { height: 54px; justify-content: flex-start; gap: 10px; padding: 0 14px; border-radius: 12px; font-size: 13.5px; }
+  .quick-grid .btn .icon { color: var(--accent); }
+
+  html.phone .display { grid-template-rows: auto minmax(0, 1fr); }
+  html.phone .display .wtitle { min-height: 48px; overflow-x: auto; scrollbar-width: none; padding: 0 8px; }
+  html.phone .display .wtitle::-webkit-scrollbar { display: none; }
+  html.phone #dock-tools { flex: none; }
+  html.phone .screen { margin: 0 6px 6px; }
+  html.phone .thead { padding: 0 6px 0 10px; }
+  html.phone .thead .hbtns { display: none; }
+  html.phone .rack { padding: 8px; min-width: max-content; }
+  html.phone .ch { grid-template-columns: 104px auto; gap: 8px; }
+  html.phone .ch > :nth-child(-n+3) { display: none; }
+  html.phone .ch .cbtn { position: sticky; left: 8px; z-index: 2; }
+  html.phone .steps { grid-template-columns: repeat(16, 34px); }
+  html.phone .ch .mini { width: 640px; }
+  html.phone .rack .graph .graph-cv { grid-column: 2; }
+  html.phone .page-cols { grid-template-columns: minmax(0, 1fr); }
+
+  html.phone .window.plugin { left: 0 !important; top: 0 !important; width: 100vw !important; height: 100dvh !important; max-height: none; border-radius: 0; border: 0; z-index: 85; padding-top: env(safe-area-inset-top, 0px); grid-template-rows: 54px minmax(0, 1fr); }
+  html.phone .plugin .wtitle { cursor: default; }
+  html.phone dialog, html.phone dialog.wide { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; padding-top: env(safe-area-inset-top, 0px); }
+  html.phone dialog .dbody { max-height: calc(100dvh - 50px - env(safe-area-inset-top, 0px)); padding: 0 14px calc(20px + env(safe-area-inset-bottom, 0px)); }
+  html.phone .menu { left: 8px !important; right: 8px !important; top: auto !important; bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important; width: auto !important; min-width: 0 !important; max-height: 70dvh; padding: 8px; border-radius: 16px; }
+  html.phone .menu-item { height: 44px; font-size: 14px; }
+  html.phone .palette { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+  html.phone .palette-box { width: calc(100vw - 16px); }
+  html.phone .palette-list { max-height: 62dvh; }
+  html.phone .palette-list button { height: 44px; font-size: 14px; }
+  html.phone .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 16px); }
+
+  @media (min-width: 761px) {  /* a tablet or a small laptop: the same tabs, more room in each */
+    html.phone[data-pview=make] main.rig .devices { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-auto-rows: max-content; align-content: start; }  /* rows as tall as their panels; the area scrolls */
+    html.phone .devices .pads { grid-column: 1 / -1; }
+    html.phone .padgrid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+    html.phone .tabbar { justify-content: center; grid-template-columns: repeat(5, minmax(0, 120px)); }
+  }
+  html.phone .tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; padding: 4px max(6px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px)); border-top: 1px solid var(--edge); background: linear-gradient(180deg, var(--panel-hi), var(--panel-lo)); }
+  .tabbar button { display: grid; justify-items: center; align-content: center; gap: 3px; height: 54px; border: 0; border-radius: 12px; background: none; color: var(--subtle); font-size: 11px; font-weight: 500; -webkit-tap-highlight-color: transparent; }
+  .tabbar button[aria-current=page] { color: var(--accent-hi); }
+  .tabbar button[aria-current=page] .icon { filter: drop-shadow(0 0 6px var(--accent-glow)); }
+  .tabbar button:active { background: var(--line); }
   @media (prefers-reduced-motion: reduce) { .switch-track, .switch-track::after, .bigpad { transition: none; } }
 </style>
 </head>
@@ -594,6 +675,7 @@
   <button class="iconbtn" id="help" title="Shortcuts and help (F1)" aria-label="Help"></button>
   <button id="theme" class="iconbtn" aria-label="Switch between dark and white studio" title="Dark or white studio"></button>
   <div class="readout" id="master-k"></div>
+  <button class="iconbtn" id="more" aria-haspopup="menu" aria-label="More" title="More"></button>
   <button id="export" class="key primary" style="height:40px;padding:0 16px;border-radius:10px"></button>
 </header>
 
@@ -673,6 +755,10 @@
         <div class="actions"><button id="make" class="key primary make"></button><button id="new-part" class="key newpart" aria-haspopup="menu" title="Rewrite one part, or let the AI write it"></button></div>
       </div>
     </div>
+    <div class="window quick" id="quick" aria-label="Quick actions">
+      <div class="wtitle"><span class="wname">Quick</span></div>
+      <div class="quick-grid" id="quick-grid"></div>
+    </div>
     <div class="window pads">
       <div class="wtitle"><span class="wname" id="pads-title"></span><div class="chips" id="pad-channels"></div><span class="grow"></span><div class="bars" id="pad-bars" role="group" aria-label="Bar"></div></div>
       <div class="padgrid" id="padgrid"></div>
@@ -692,6 +778,7 @@
   <span class="dotted" id="save-state">Autosave on</span>
 </footer>
 
+<nav class="tabbar" id="tabbar" aria-label="Studio"></nav>
 <div class="window plugin" id="plugin" hidden></div>
 <dialog id="dlg" class="wide"></dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>

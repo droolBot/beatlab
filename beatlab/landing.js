@@ -20,7 +20,8 @@ const fmt = (v, d) => v.toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 // ---------- the 3D scene: an ink player and a clear one ----------
 const gl = $('#gl'), renderer = new THREE.WebGLRenderer({ canvas: gl, antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+const DPR = Math.min(matchMedia('(max-width: 760px), (pointer: coarse)').matches ? 1.5 : 2, devicePixelRatio);  // phones draw fewer pixels and stay smooth
+renderer.setPixelRatio(DPR);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(22, 1, 0.1, 100);
@@ -151,7 +152,7 @@ function drawBars(g, { fill, amp, hair, thick = 0, cy, maxH, top, bottom, wipe =
   }
 }
 function sizeCanvas(cv, w, h) {
-  const dpr = Math.min(2, devicePixelRatio), W = Math.round(w * dpr), H = Math.round(h * dpr);
+  const dpr = DPR, W = Math.round(w * dpr), H = Math.round(h * dpr);
   if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const g = cv.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -160,13 +161,24 @@ function sizeCanvas(cv, w, h) {
 }
 
 // ---------- every frame ----------
-let P = 0, lastP = -1, dirty = true;
+let P = 0, lastP = -1, dirty = true, lastNow = 0;
+// What each stretch of the tape is showing: [from, to, label, words]
+const STORY = [
+  [0.05, 0.19, 'Free, in your browser', 'A whole beat studio with no account, nothing to buy and nothing to install.'],
+  [0.27, 0.41, 'Made here', 'BeatLab wrote and rendered this trap beat a moment ago, in this page. Press ▶ on the tag to hear it.'],
+  [0.49, 0.63, 'One press', 'Pick one of twelve styles and press Make a beat: drums, 808, chords and a melody, all yours to edit.'],
+  [0.7, 0.8, 'Inside', 'It works the way FL Studio works: playlist, channel rack, piano roll, mixer and master.'],
+  [0.835, 0.9, 'Its own brain', 'Ask for changes in words, hum a melody into the piano roll, and let the mix doctor fix the mix.'],
+];
 const PARTS = ['Master', 'Mixer', 'Channel rack', 'Piano roll', 'Playlist'];  // bottom layer to top
 $('#callouts').innerHTML = PARTS.map((t, i) => `<div class="callout ${i % 2 ? 'left' : ''}"><i></i><span><b>0${5 - i}</b>${t}</span></div>`).join('');
 function frame(now) {
   requestAnimationFrame(frame);
-  const tape = $('#tape');
-  P = clamp01(-tape.getBoundingClientRect().top / Math.max(1, tape.offsetHeight - innerHeight));
+  const tape = $('#tape'), dt = Math.min(64, now - lastNow || 16);
+  lastNow = now;
+  // the tape eases toward the scroll position, so it glides instead of stepping with each wheel notch
+  const aim = clamp01(-tape.getBoundingClientRect().top / Math.max(1, tape.offsetHeight - innerHeight));
+  P = still || Math.abs(aim - P) < 0.0004 ? aim : P + (aim - P) * (1 - Math.exp(-dt / 85));
   if (P === lastP && !dirty && !wave.playing) return;
   lastP = P;
   dirty = false;
@@ -199,6 +211,9 @@ function frame(now) {
   $('#counter').textContent = String(Math.floor(3214 + P * 96786)).padStart(12, '0');
   $('#hint').style.opacity = 1 - seg(P, 0, 0.015);
   $('#lede').style.opacity = 1 - seg(P, 0.012, 0.045);
+  const st = STORY.find(([a, b]) => P >= a && P <= b), story = $('#story');
+  if (st && story.dataset.at !== st[2]) { story.dataset.at = st[2]; story.replaceChildren(Object.assign(document.createElement('b'), { textContent: st[2] }), st[3]); }
+  story.style.opacity = st ? Math.min(1, (P - st[0]) / 0.012, (st[1] - P) / 0.012) : 0;
 
   // the barcode wipe, the waveform and its collapse into a strip
   const g = sizeCanvas($('#fx'), w, h), wipe = seg(P, 0.2, 0.25), wv = seg(P, 0.25, 0.42), shrink = seg(P, 0.42, 0.47);

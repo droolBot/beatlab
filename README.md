@@ -34,6 +34,10 @@ Try it in your browser: **https://droolbot.github.io/beatlab/**. How to use it: 
 - **Hum it.** Hum or sing a melody into the microphone, and BeatLab writes the notes into the piano roll, in the song's key and on the beat.
 - **Finished beats.** Auto mix balances the parts by loudness. Export gives WAV (16, 24 or 32-bit), MP3 at 320 kbps, MIDI for each part, stems, and a loudness report, with mastering to a target LUFS.
 - **Record.** Mic, MIDI keyboard, pads and the computer keyboard all play the selected sound and can record into patterns.
+- **On your phone.** On phones, tablets and small laptops the studio shows one screen at a time, GarageBand-style:
+  - a tab bar with Song, Beat, Keys, Mix and Make
+  - full-screen channel windows
+  - menus that slide up from the bottom
 
 ![BeatLab in DAW layout](beatlab/media/daw.webp)
 
