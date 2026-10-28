@@ -10,7 +10,7 @@ import { humToNotes } from './hum.js';
 import { diagnose } from './doctor.js';
 import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
-import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable } from './brain.js';
+import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable, aiContinueLine, aiContinueDrums } from './brain.js';
 import { plan, describe, fromModel } from './intent.js';
 import { quantize, humanize, euclid, snapToScale, inBox, tidy, AUTO, CHORDS, clock } from './tools.js';
 import { lufsOf, finish, encodeWav, encodeMp3, limitInPlace, peakOf, db, midiFile, zipFiles } from './deliver.js';
@@ -289,6 +289,7 @@ function audition(t, p) {
 // ---------- refresh everything that shows the song ----------
 function changed({ redraw = true } = {}) {  // redraw: false leaves the screen alone, e.g. right after dragging a note
   save();
+  suggestSoon();
   if (player?.playing) player.load(song, view(), dusty(), audioBufs);
   renderTransport();
   if (redraw) renderView();
@@ -416,6 +417,7 @@ function refreshRack() {
     if (t) row.lastElementChild.replaceWith(t.kind === 'drum' ? steps(t, notesFor(t, ui.pattern)) : mini(t, notesFor(t, ui.pattern)));
   }
   V.rack.tools.querySelectorAll('.pager button').forEach((b, i) => b.setAttribute('aria-pressed', i === ui.bar));
+  showSuggestion();
 }
 function stepsChanged() {  // what a step edit has to redraw
   changed({ redraw: false });
@@ -1901,6 +1903,7 @@ function renderView() {
   RENDER[ui.view]();
   lastStep = -1;
   markPhoneTab();
+  if (suggestion && !showing(suggestion.where)) { suggestion = null; showSuggestion(); }  // a suggestion belongs to its view
 }
 
 // The DAW layout: the playlist fills the desktop, the other editors float above it where you left them
@@ -2171,6 +2174,7 @@ function renderRack() {
     return (ui.graph ?? 'off') !== 'off' && t.id === ui.selected && t.kind === 'drum' ? [row, graphRow(t)] : row;
   }).flat()));
   revealChannel();
+  showSuggestion();
 }
 function graphRow(t) {
   const cv = h('canvas', { class: 'graph-cv', 'aria-label': `${trackName(t)} ${ui.graph === 'vel' ? 'velocity' : 'chance'} per step` });
@@ -2374,6 +2378,7 @@ function renderRoll() {
     t.id === 'melody' ? h('button', { class: 'btn small', onclick: () => aiMelodyButton() }, icon('brain', 14), `AI melody`) : null,
     t.kind !== 'drum' ? h('button', { class: 'btn small', title: 'Hum or sing this part into the microphone; BeatLab writes the notes in the key', onclick: startHum }, icon('mic', 14), 'Hum it') : null,
     t.kind !== 'drum' ? h('button', { class: 'btn small', title: 'The AI writes a variation of this part. Press again for the next one', onclick: () => aiVaryButton('melody') }, icon('brain', 14), 'Vary') : null,
+    ['melody', 'bass'].includes(t.kind) ? suggestBtn() : null,
     h('button', { class: 'btn small ghost', title: 'Remove every note in this pattern', onclick: () => { t[editable(t)] = []; rollSel.clear(); changed(); } }, icon('trash', 14), 'Clear')].filter(Boolean));
   const keys = h('div', { class: 'keys' });
   for (let p = hi; p >= lo; p--) keys.append(h('div', { class: NOTES[p % 12].includes('#') ? 'key-w black' : 'key-w', 'data-p': p }, p % 12 === 0 ? noteName(p) : ''));
@@ -2420,10 +2425,18 @@ function renderRoll() {
       g.globalAlpha = 1;
       if (nw > 26) { g.fillStyle = '#111'; g.fillText(noteName(n.p), x + 4, y + 9); }
     }
+    const sg = suggestion?.where === 'roll' && suggestion.track === t.id && suggestion.pattern === ui.pattern ? suggestion.notes : [];
+    for (const n of sg) {  // the suggestion: an outline and a faint fill, until Tab keeps it
+      if (n.p < lo || n.p > hi) continue;
+      const x = n.t / STEP * cw + 1, y = (hi - n.p) * rh + 1, nw = Math.max(4, n.d / STEP * cw - 2);
+      g.globalAlpha = 0.22; g.fillStyle = P.accent; g.beginPath(); g.roundRect(x, y, nw, rh - 3, 3); g.fill();
+      g.globalAlpha = 0.9; g.strokeStyle = P.accent; g.setLineDash([3, 2]); g.lineWidth = 1; g.stroke(); g.setLineDash([]); g.globalAlpha = 1;
+    }
     if (box) { g.strokeStyle = P.accent; g.fillStyle = `${P.accent}18`; const bx = Math.min(box.x0, box.x1), by = Math.min(box.y0, box.y1); g.fillRect(bx, by, Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0)); g.strokeRect(bx, by, Math.abs(box.x1 - box.x0), Math.abs(box.y1 - box.y0)); }
     top.replaceChildren(...song.harmony.filter(c => c.t < cols * STEP).map(c => h('span', { style: `left:${c.t / STEP * cw}px` }, c.name)));
     drawVel();
   };
+  V.roll.redraw = draw;
   const drawVel = () => {
     const w = vel.clientWidth, ht = vel.clientHeight, dpr = devicePixelRatio || 1, P = pal();
     if (!w) return;
@@ -3265,6 +3278,82 @@ async function cleanUpAudio() {
 }
 
 
+
+// ---------- autocomplete: write a few notes or steps, pause, and the AI suggests what comes next ----------
+// Like code completion: the suggestion shows faintly, Tab (or Keep) adds it, Esc drops it, and any edit
+// asks again. Lines come from the melody model, drums from the drum model (brain.js), both in this browser.
+let suggestion = null, suggestTimer = 0, dropped = '';
+const autocompleteOn = () => ui.autocomplete !== false;
+const lineSig = (t, pid) => `${t.id}|${pid}|${JSON.stringify(t[pid] ?? [])}`;
+const drumSig = pid => `drums|${pid}|${JSON.stringify(song.tracks.filter(t => t.kind === 'drum').map(t => t[pid] ?? []))}`;
+function suggestSoon() {
+  clearTimeout(suggestTimer);
+  if (suggestion) { suggestion = null; showSuggestion(); }
+  if (!autocompleteOn() || batching || rec) return;
+  suggestTimer = setTimeout(() => suggestNext().catch(e => aiStatus(`Autocomplete stopped: ${e.message}`)), 900);
+}
+async function suggestNext() {
+  if (busy || suggestion) return;
+  const pid = ui.pattern, len = barsOf(pid) * 16;
+  if (showing('roll')) {
+    const t = track(ui.selected);
+    if (!t || !['melody', 'bass'].includes(t.kind) || !(t[pid] ?? []).length) return;
+    const sig = lineSig(t, pid), from = Math.ceil(Math.max(...t[pid].map(n => n.t + n.d)) / STEP), steps = Math.min(32, len - from);
+    if (sig === dropped || steps < 4) return;
+    const [lo, hi] = PIANO_RANGE[t.kind];
+    aiStatus('Listening for what comes next…');
+    const notes = await aiContinueLine(song, t[pid], from, steps, { lo, hi }, aiStatus);
+    aiStatus('');
+    if (notes.length && lineSig(t, pid) === sig && showing('roll') && ui.selected === t.id) { suggestion = { where: 'roll', track: t.id, pattern: pid, notes, sig }; showSuggestion(); }
+  } else if (showing('rack')) {
+    const drums = song.tracks.filter(t => t.kind === 'drum'), bar = ui.bar ?? 0, lit = drums.flatMap(t => (t[pid] ?? []).map(n => Math.round(n.t / STEP))).filter(s => s >= bar * 16 && s < bar * 16 + 16);
+    if (!lit.length) return;
+    const sig = drumSig(pid), from = Math.max(...lit) + 1, steps = bar * 16 + 16 - from;  // the rest of the bar being written
+    if (sig === dropped || steps < 2) return;
+    aiStatus('Listening for what comes next…');
+    const parts = await aiContinueDrums(song, pid, from, steps, aiStatus);
+    aiStatus('');
+    for (const [id, list] of Object.entries(parts)) if (!track(id) || track(id).mute) delete parts[id];
+    if (Object.values(parts).some(l => l.length) && drumSig(pid) === sig && showing('rack')) { suggestion = { where: 'rack', pattern: pid, bar, parts, sig }; showSuggestion(); }
+  }
+}
+function showSuggestion() {
+  const s = suggestion, n = !s ? 0 : s.where === 'roll' ? s.notes.length : Object.values(s.parts).reduce((a, l) => a + l.length, 0);
+  $('#suggest').hidden = !s;
+  if (s) $('#suggest b').textContent = `${n} suggested ${s.where === 'roll' ? (n === 1 ? 'note' : 'notes') : (n === 1 ? 'hit' : 'hits')}`;
+  V.roll.redraw?.();
+  for (const el of V.rack.body.querySelectorAll('.step.ghost')) el.classList.remove('ghost');
+  if (s?.where === 'rack' && s.pattern === ui.pattern && s.bar === (ui.bar ?? 0)) {
+    for (const [id, list] of Object.entries(s.parts)) {
+      const cells = V.rack.body.querySelectorAll(`.ch[data-ch="${id}"] .step`);
+      for (const h of list) cells[Math.round(h.t / STEP) - s.bar * 16]?.classList.add('ghost');
+    }
+  }
+}
+function keepSuggestion() {
+  const s = suggestion;
+  if (!s) return;
+  suggestion = null;
+  if (s.where === 'roll') { const t = track(s.track); t[s.pattern] = tidy([...(t[s.pattern] ?? []), ...s.notes]); }
+  else for (const [id, list] of Object.entries(s.parts)) { const t = track(id); t[s.pattern] = [...(t[s.pattern] ?? []), ...list].sort((a, b) => a.t - b.t); }
+  hint('Kept the suggestion. Ctrl+Z takes it back; keep writing and the next one comes.');
+  if (s.where === 'rack') stepsChanged(); else changed();
+}
+function dropSuggestion() {
+  if (!suggestion) return;
+  dropped = suggestion.sig;  // not asked again until something changes
+  suggestion = null;
+  showSuggestion();
+}
+function toggleAutocomplete() {
+  ui.autocomplete = !autocompleteOn();
+  save();
+  if (!ui.autocomplete) dropSuggestion(); else suggestSoon();
+  renderView();
+  toast(ui.autocomplete ? 'Autocomplete on: write a few notes or steps and pause. The AI suggests what comes next; Tab keeps it, Esc drops it.' : 'Autocomplete off.');
+}
+const suggestBtn = () => h('button', { class: 'btn small', 'aria-pressed': autocompleteOn(), title: 'Autocomplete: after you write, the AI suggests what comes next. Tab keeps it, Esc drops it', onclick: toggleAutocomplete }, icon('brain', 14), 'Suggest');
+
 // ---------- phones: Song, Beat, Keys and Mix are the screen's views; Make is the Brain, quick actions and pads ----------
 const PHONE_TABS = [['arrange', 'playlist', 'Song'], ['rack', 'rack', 'Beat'], ['roll', 'piano', 'Keys'], ['mixer', 'mixer', 'Mix'], ['make', 'brain', 'Make']];
 function markPhoneTab() {
@@ -3371,6 +3460,7 @@ function commands() {
     { group: 'Studio', label: `Computer keyboard piano ${ui.typing ? 'off' : 'on'}`, icon: 'keyboard', run: toggleTyping },
     { group: 'Studio', label: 'Connect a MIDI keyboard', icon: 'midi', run: startMidi },
     { group: 'Studio', label: 'Shortcuts and help', icon: 'help', keys: 'F1', run: openHelp },
+    { group: 'Brain', label: `Autocomplete ${autocompleteOn() ? 'off' : 'on'} (the AI suggests what comes next)`, icon: 'brain', run: toggleAutocomplete },
     { group: 'Studio', label: 'Read the BeatLab docs', icon: 'help', run: () => window.open('docs.html', '_blank', 'noopener') },
     { group: 'Studio', label: 'Go to the home page', icon: 'left', run: () => { location.href = '/'; } },
   ];
@@ -3450,6 +3540,8 @@ const TOOL_KEYS = { p: 'draw', b: 'paint', d: 'erase', t: 'mute', c: 'slice', e:
 function keys(e) {
   if (e.target.closest?.('input, select, textarea, [contenteditable]')) return;
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase(), ed = focused();
+  if (suggestion && e.key === 'Tab' && !mod && !e.altKey) { e.preventDefault(); return keepSuggestion(); }
+  if (suggestion && e.key === 'Escape') { e.preventDefault(); return dropSuggestion(); }
   if (mod && k === 'k') { e.preventDefault(); return openPalette(); }
   if (mod && k === 'z') { e.preventDefault(); return stepHistory(e.shiftKey ? 1 : -1); }
   if (mod && k === 'y') { e.preventDefault(); return stepHistory(1); }
@@ -3560,6 +3652,14 @@ function staticChrome() {  // icons and labels that never change
   label($('#pads-title'), 'pads', 'Pads');
   label($('#deck-title'), 'record', 'Turntable');
   initPhone();
+  $('.display .wtitle').addEventListener('wheel', e => {  // a vertical wheel scrolls a toolbar that doesn't fit
+    const w = e.currentTarget;
+    if (e.target.closest('.knob') || w.scrollWidth <= w.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    w.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+  $('#sg-keep').addEventListener('click', keepSuggestion);
+  $('#sg-drop').addEventListener('click', dropSuggestion);
   $('#export').replaceChildren(icon('export', 16), 'Export');
   $('#export').title = 'Save MIDI, WAV and MP3 files for FL Studio (Ctrl+E)';
   $('#play').replaceChildren(icon('play', 18));

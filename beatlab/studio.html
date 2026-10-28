@@ -214,7 +214,10 @@
   .tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .crumb { min-width: 0; color: var(--subtle); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .screen { margin: 0 10px 10px; border-radius: 10px; background: var(--screen); box-shadow: var(--sh-well); overflow: auto; position: relative; }
-  .display .wtitle { padding-left: 10px; }
+  .display .wtitle { padding-left: 10px; overflow-x: auto; scrollbar-width: none; }  /* long toolbars scroll; the wheel scrolls them sideways */
+  .display .wtitle::-webkit-scrollbar { display: none; }
+  .display .wtitle > .seg, #dock-tools { flex: none; }
+  @media (max-width: 2100px) { .display .seg button[aria-selected=false] .view-label { display: none; } }
   .display-body { display: grid; min-height: 0; }
   .display-body > * { grid-area: 1 / 1; }
   .devices { display: grid; grid-template-columns: 580px minmax(0, 1fr) auto; gap: var(--gap); min-height: 0; }
@@ -565,6 +568,15 @@
   @media (max-width: 1320px) { .brand b { display: none; } .devices { grid-template-columns: 540px minmax(0, 1fr); } .devices .deck { display: none; } }
   @media (max-height: 900px) { :root { --deck-h: 250px; --gap: 10px; } .window { grid-template-rows: 44px minmax(0, 1fr); } .top { padding: 7px 14px; } .lcd, .tkey { height: 36px; } .brain-body { row-gap: 8px; } .brain-screen .lcd.big, .k3d { height: 84px; } .make, .newpart, .style-name, .opt { height: 38px; } }
 
+  /* autocomplete: the AI's suggestion, shown faintly until you keep it */
+  .step.ghost { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .step.ghost::after { background: var(--accent); opacity: 0.45; }
+  .suggest { position: fixed; z-index: 70; top: 138px; right: 28px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); background: linear-gradient(180deg, var(--panel-hi), var(--panel-lo)); box-shadow: 0 16px 40px rgba(0,0,0,0.45), 0 0 18px -6px var(--accent-glow); }
+  .suggest b { font-weight: 500; font-size: 12.5px; }
+  .suggest kbd { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--edge); margin-left: 4px; }
+  html.phone .suggest { top: auto; right: 8px; left: 8px; bottom: calc(74px + env(safe-area-inset-bottom, 0px)); justify-content: space-between; }
+  html.phone .suggest kbd { display: none; }
+
   /* ---------- phones: one view at a time, a tab bar at the bottom, the Brain and pads under Make ---------- */
   .tabbar, #more, .quick { display: none; }
   html.phone, html.phone body { height: 100dvh; }
@@ -778,6 +790,7 @@
   <span class="dotted" id="save-state">Autosave on</span>
 </footer>
 
+<div class="suggest" id="suggest" role="status" hidden><span class="dot-led on"></span><b>Suggested notes</b><button class="btn small" id="sg-keep" title="Keep the suggestion (Tab)">Keep <kbd>Tab</kbd></button><button class="iconbtn" id="sg-drop" aria-label="Drop the suggestion" title="Drop it (Esc)">✕</button></div>
 <nav class="tabbar" id="tabbar" aria-label="Studio"></nav>
 <div class="window plugin" id="plugin" hidden></div>
 <dialog id="dlg" class="wide"></dialog>

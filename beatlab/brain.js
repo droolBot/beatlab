@@ -234,3 +234,49 @@ export async function aiFill(song, pattern, bars, status) {
   }
   return parts;
 }
+
+// ---------- autocomplete: what comes next, after the notes you've written ----------
+// The next `steps` 16ths of a line from step `from`, continuing the two bars before it and following the
+// chords. lo..hi is the part's range. Returns notes starting at `from` or later, in the song's key.
+export async function aiContinueLine(song, notes, from, steps, { lo, hi, temperature = 1 }, status) {
+  const rnn = await model('chord_pitches_improv', status);
+  const start = Math.max(0, from - 32), win = from - start;
+  const before = notes.filter(n => n.t >= start * STEP && n.t < from * STEP);
+  if (!before.length) return [];
+  const mid = before.reduce((s, n) => s + n.p, 0) / before.length, shift = 12 * Math.round((mid - 66) / 12);  // the model sings between MIDI 48 and 83
+  const fit = p => { while (p - shift < 48) p += 12; while (p - shift > 83) p -= 12; return p - shift; };
+  const primer = before.map(n => ({ pitch: fit(n.p), quantizedStartStep: Math.round(n.t / STEP) - start, quantizedEndStep: Math.min(win, Math.max(Math.round(n.t / STEP) - start + 1, Math.round((n.t + n.d) / STEP) - start)) }));
+  const chords = Array.from({ length: win + steps }, (_, s) => { const c = chordAt(song.harmony, (start + s) * STEP); return NOTES[c.root] + SIMPLE_SUFFIX[c.q]; });
+  const out = await rnn.continueSequence(seq(primer, win), steps, temperature, chords);
+  const scale = songScale(song);
+  return out.notes.map(n => {
+    const t = (from + n.quantizedStartStep) * STEP, chord = chordAt(song.harmony, t);
+    let p = n.pitch + shift;
+    while (p < lo) p += 12;
+    while (p > hi) p -= 12;
+    if (!chordScale(chord.pcs, scale).includes(p % 12)) p = nearestOf(p, chordScale(chord.pcs, scale), lo, hi);
+    return { t, d: Math.max(1, Math.min(n.quantizedEndStep, steps) - n.quantizedStartStep) * STEP, p, v: n.quantizedStartStep % 4 === 0 ? 100 : 88 };
+  }).filter(n => n.t < (from + steps) * STEP);
+}
+
+// The drums for steps from..from+steps, continuing the two bars before. Returns { trackId: [hits] }.
+export async function aiContinueDrums(song, pattern, from, steps, status) {
+  const rnn = await model('drum_kit_rnn', status);
+  const start = Math.max(0, from - 32), primer = [];
+  for (const t of song.tracks) {
+    if (!TO_GM[t.id]) continue;
+    for (const n of notesFor(t, pattern)) {
+      const s = Math.round(n.t / STEP);
+      if (s >= start && s < from && !primer.some(x => x.pitch === TO_GM[t.id] && x.quantizedStartStep === s - start)) primer.push({ pitch: TO_GM[t.id], quantizedStartStep: s - start, quantizedEndStep: s - start + 1, isDrum: true });
+    }
+  }
+  if (!primer.length) return {};
+  const out = await rnn.continueSequence(seq(primer, from - start), steps, 1.1);
+  const parts = {};
+  for (const n of out.notes) {
+    const id = FROM_GM[n.pitch], s = from + n.quantizedStartStep;
+    if (!id || s >= from + steps || (parts[id] ??= []).some(x => x.t === s * STEP)) continue;
+    parts[id].push({ t: s * STEP, d: 12, p: 60, v: s % 4 === 0 ? 108 : s % 2 ? 86 : 96 });
+  }
+  return parts;
+}
