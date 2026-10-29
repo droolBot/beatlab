@@ -3411,7 +3411,7 @@ function answerQuestion(q) {
   const t = q.toLowerCase();
   if (!/\?\s*$|^(what|which|how many|how long|how fast|tell me|list|show me|explain)\b/.test(t.trim()) || /\b(make|add|turn|set|change|mute|remove)\b/.test(t)) return null;
   const parts = song.tracks.filter(x => x.kind !== 'bus');
-  if (/\b(what can you|help|commands?|what do you)\b/.test(t)) return 'I can make a beat in any of the 12 styles, change the tempo, key or swing, rewrite or vary a part, add slides, rolls and fills, mute, pan or level channels, add any effect (half-time, tape stop, auto-tune and more), balance and check the mix, write down a melody you hum, and export. Select notes in the piano roll and I change only those.';
+  if (/\b(what can you|help|commands?|what do you)\b/.test(t)) return 'I can make a beat in any of the 12 styles, change the tempo, key or swing, rewrite or vary a part, add slides, rolls and fills, mute, pan or level channels, add any effect (half-time, tape stop, auto-tune and more), balance and check the mix, write down a melody you hum, turn a loop into a full song, and export. Select notes in the piano roll and I change only those. While you write, I suggest what comes next: Tab keeps it.';
   if (/\b(key|scale)\b/.test(t)) return `${NOTES[song.root]} ${song.mode}. The notes in key are ${songScale(song).sort((x, y) => (x - song.root + 12) % 12 - (y - song.root + 12) % 12).map(p => NOTES[p]).join(', ')}.`;  // from the tonic
   if (/\b(tempo|bpm|how fast|speed)\b/.test(t)) return `${song.bpm} BPM, with ${Math.round((song.swing ?? 0) * 200)}% swing.`;
   if (/\b(style|genre)\b/.test(t)) return `${STYLES[song.style].name}, which usually sits between ${STYLES[song.style].bpm?.join?.(' and ') ?? 'its usual tempos'} BPM.`;
