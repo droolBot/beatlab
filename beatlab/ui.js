@@ -276,15 +276,16 @@ export function palette({ items, parse, placeholder }) {
   const draw = () => {
     const q = input.value.trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
     const typed = q ? parse?.(q) : null;
-    shown = [...(typed ? [{ ...typed, group: 'Do it', icon: typed.icon ?? 'right' }] : []),
-      ...items.filter(it => words.every(w => `${it.label} ${it.group ?? ''} ${it.keys ?? ''}`.toLowerCase().includes(w)))].slice(0, 60);
+    const did = (typed ? [typed].flat() : []).map(x => ({ group: 'Do it', ...x, icon: x.icon ?? 'right' }));
+    const found = items.filter(it => words.every(w => `${it.label} ${it.group ?? ''} ${it.keys ?? ''}`.toLowerCase().includes(w)));
+    shown = [...did.filter(x => !x.fallback), ...found, ...(found.length ? [] : did.filter(x => x.fallback))].slice(0, 60);  // fallbacks only when nothing else matches
     at = Math.min(at, Math.max(0, shown.length - 1));
     let group = null;
     list.replaceChildren(...shown.flatMap((it, i) => {
       const head = it.group !== group ? h('div', { class: 'phead' }, (group = it.group)) : null;
       return [head, h('button', { role: 'option', 'aria-selected': i === at, onclick: () => go(it), onpointermove: () => { if (at !== i) { at = i; mark(); } } },
         icon(it.icon ?? 'right', 15), h('span', {}, it.label), it.keys ? h('small', {}, it.keys) : null)];
-    }));
+    }).filter(Boolean));
     if (!shown.length) list.replaceChildren(h('div', { class: 'phead' }, `Nothing matches. Try "tempo 140", "mute hats", "key G minor" or "make a trap beat".`));
   };
   const mark = () => list.querySelectorAll('[role=option]').forEach((b, i) => { b.setAttribute('aria-selected', String(i === at)); if (i === at) b.scrollIntoView({ block: 'nearest' }); });

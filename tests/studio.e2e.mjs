@@ -94,6 +94,7 @@ const results = [];
 async function test(name, fn) {
   if (process.env.ONLY && !new RegExp(process.env.ONLY).test(name)) return;
   const before = errors.length;
+  process.stderr.write(`… ${name}\n`);  // progress, so a stuck test shows which one
   try { const note = await fn(); results.push(`PASS ${name}${note ? ` — ${note}` : ''}`); }
   catch (e) { results.push(`FAIL ${name} — ${e.message}`); await shot(`fail_${name.replace(/\W+/g, '_')}`).catch(() => {});
     await ev(`document.querySelector('[data-layout=rig]').click(); 0`).catch(() => {}); }  // a failure mid-test can leave the DAW layout on

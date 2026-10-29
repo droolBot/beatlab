@@ -111,7 +111,11 @@
    **AI-native, like a code editor for beats (2026-10-29):** autocomplete (write a few notes or steps, pause,
    and the AI suggests what comes next; Tab keeps it), the brain chat (Ctrl+I: knows the project, lists what
    changed, Keep, Undo and A/B, answers questions, @mentions, edits only the selected notes), and a phone and
-   tablet layout with a tab bar. Next: an agent that turns a loop into a full song step by step, and a
-   bigger optional local model for the chat.
+   tablet layout with a tab bar, then the agent that turns a loop into a full song.
+   **A brain that understands producers (2026-10-29):** measured on requests typed the way producers type
+   them (brain_eval.mjs, now part of `npm test`), it went from 63% to 100% of 190: complaints ("808 not
+   hitting"), moods, sound swaps, sidechain, slang and typos. When it doesn't get something, it offers the
+   closest things it can do. The smart brain has a Best size (Qwen2.5 7B) for strong graphics cards, which
+   falls back to the fast one by itself. Not yet tried on a PC with WebGPU.
 5. **Depth:** every synth voice on the audio thread for lower CPU, sends between inserts, ghost channels,
    collaboration from a shared link, a brain that learns from your past beats, and more of FL's long tail.

@@ -23,7 +23,11 @@ Try it in your browser: **https://droolbot.github.io/beatlab/**. How to use it: 
   - **Pitch shifter**
   - **Transient shaper:** more punch or a shorter tail
 - **Sounds.** BeatLab ships its own kits (Trap, Drill, Lofi, Boom Bap, House), 808s and loops. If FL Studio is installed, BeatLab also plays FL's own packs from your install, on the website too: multi-sampled instruments, and drum kits with velocity layers.
-- **The brain.** Ctrl+K takes requests like "make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4". It shows the plan, then does it as one undo. For drums it uses Google's free Magenta models to humanize, write variations and play fills. An optional smart mode runs a small language model (Qwen2.5 1.5B) inside your browser to understand sentences the rules don't.
+- **The brain.** Ctrl+K takes requests like "make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4". It shows the plan, then does it as one undo.
+  - It understands the way producers actually type: "the kick is too quiet", "808 not hitting", "i dont like the chords", "make the melody a flute", "sidechain the 808", "make it sad", slang and typos ("mak a trap beat", "louder kik").
+  - When it doesn't get something, it offers the closest things it can do, one click each.
+  - For drums it uses Google's free Magenta models to humanize, write variations and play fills.
+  - An optional smart mode runs a language model inside your browser for sentences the rules don't understand: Fast (Qwen2.5 1.5B, 1 GB) or Best (Qwen2.5 7B, 5 GB, for strong graphics cards).
 - **Brain chat** (Ctrl+I). A side panel, like a code editor's AI assistant, that knows your channels, patterns, key and mix.
   - After each request it shows what changed, with **Keep**, **Undo** and **A/B** (hear before and after while it plays).
   - It answers questions about the beat, takes @mentions, and changes only the selected notes when you've selected some.
@@ -72,7 +76,7 @@ The `beatlab/` folder is the website. Every push to `main` republishes it throug
 
 ## The smart brain
 
-Typed commands work instantly and offline. Smart mode downloads a roughly 1 GB model once. To turn it on, open the menu next to **Make a beat** and pick **Smart brain for anything it doesn't know**, or type "smart brain" after Ctrl+K. It needs WebGPU, which current Chrome and Edge have on most Windows PCs. After the first download, it runs offline.
+Typed commands work instantly and offline. Smart mode downloads a model once: Fast is about 1 GB, Best is about 5 GB and needs a graphics card with about 6 GB of memory (if yours can't hold it, BeatLab switches back to Fast by itself). To turn it on, open the menu next to **Make a beat** and pick **Smart brain for anything it doesn't know**, or **Best smart brain**. You can also type "smart brain" after Ctrl+K, or press **Ask the smart brain instead** in the chat when the brain doesn't get something. It needs WebGPU, which current Chrome and Edge have on most Windows PCs. After the first download, it runs offline.
 
 ## How it's built
 
@@ -111,7 +115,7 @@ npm test
 That runs the unit tests:
 - syntax checks for every module
 - the music engine, note tools and instrument zoning
-- the brain's 70 phrasings
+- the brain's 72 phrasings, and 190 requests typed the way producers type them (`beatlab/brain_eval.mjs`, which fails below 95%)
 - the DSP, measured on test signals: half-time halves the pitch, Tune pulls a sharp A back to 220 Hz
 - every mix doctor rule, on mixes built with one known problem each
 - humming to notes
@@ -153,7 +157,7 @@ These libraries load from jsDelivr when they're first needed:
 | [three.js](https://threejs.org) | MIT |
 | [Magenta.js](https://github.com/magenta/magenta-js) and its MusicVAE / GrooVAE checkpoints | Apache-2.0 |
 | [WebLLM](https://github.com/mlc-ai/web-llm) | Apache-2.0 |
-| [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) | Apache-2.0 |
+| [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) and [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) | Apache-2.0 |
 | [lamejs](https://github.com/zhuker/lamejs) | LGPL-3.0 |
 | Anton, Space Grotesk, IBM Plex Mono, Geist (Google Fonts) and DSEG7 | SIL Open Font License |
 

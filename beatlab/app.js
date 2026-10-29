@@ -10,8 +10,8 @@ import { humToNotes } from './hum.js';
 import { diagnose } from './doctor.js';
 import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
-import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable, aiContinueLine, aiContinueDrums } from './brain.js';
-import { plan, describe, fromModel } from './intent.js';
+import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable, aiContinueLine, aiContinueDrums, SMART_MODELS } from './brain.js';
+import { plan, describe, fromModel, closest } from './intent.js';
 import { quantize, humanize, euclid, snapToScale, inBox, tidy, AUTO, CHORDS, clock } from './tools.js';
 import { lufsOf, finish, encodeWav, encodeMp3, limitInPlace, peakOf, db, midiFile, zipFiles } from './deliver.js';
 import { projects, putAudio, getAudio, delAudio, audioIds, newId } from './store.js';
@@ -769,6 +769,7 @@ function brainPlan(text) {
 function brainItem(q) {  // the palette's top line when what you typed is a request rather than a search
   const steps = brainPlan(q), known = steps.filter(x => x.type !== 'unknown'), words = q.split(/\s+/).length;
   if (ui.smart && !known.length && words >= 3) return { label: `Ask the smart brain: "${q}"`, icon: 'brain', run: () => runBrain(q) };
+  if (!known.length && words >= 3) return closest(q).map(x => ({ group: 'The brain didn’t get that. Closest things it can do', label: x, icon: 'brain', fallback: true, run: () => runBrain(x) }));
   if (!known.length || (steps.length === 1 && words < 2)) return null;
   return { label: steps.map(x => (x.type === 'unknown' && ui.smart ? `smart brain: "${x.text}"` : describe(x, brainNames()))).join(' · '), icon: 'brain', run: () => runBrain(q) };
 }
@@ -850,6 +851,7 @@ async function runStep(st) {
     case 'hatRolls': return addHatRolls(st.every, pid);
     case 'automix': return autoMix(false);
     case 'doctor': return mixDoctor();
+    case 'sound': for (const t of ts.filter(x => x.kind !== 'drum' && x.kind !== 'audio' && x.kind !== 'bus')) { t.sound = st.sound; t.params = {}; delete t.preset; clearInstrument(t); clearSample(t); } return changed();
     case 'agent': { const note = await songAgent(); showView('arrange'); return note; }
     case 'hum': return startHum();
     case 'export': return openExport(st.fmt === 'mp3' ? { mp3: true } : st.fmt === 'midi' ? { mix: false, stems: false } : st.fmt === 'stems' ? { stems: true } : {});
@@ -858,6 +860,7 @@ async function runStep(st) {
     case 'mute': ts.forEach(t => { t.mute = st.on; }); return mixChanged();
     case 'solo': ts.forEach(t => { t.solo = st.on; }); return mixChanged();
     case 'pan': ts.forEach(t => { t.pan = st.value; }); return mixChanged();
+    case 'duck': ts.filter(t => t.id !== 'kick').forEach(t => { t.duck = st.value; }); return mixChanged();
     case 'vol': ts.forEach(t => { t.vol = clamp(t.vol * 10 ** (st.dB / 20), 0, 1.2); }); return mixChanged();
     case 'fx': ts.forEach(t => addFx(t, { type: st.fx, ...st.set })); return mixChanged();
     case 'unfx': ts.forEach(t => { t.fx = t.fx.filter(f => (st.fx ? f.type !== st.fx : f.auto)); }); return mixChanged();
@@ -881,7 +884,9 @@ async function runBrain(text, { quiet = false } = {}) {
     if (ui.smart && unknown.length) {  // the smart brain rewrites what the rules didn't get into commands they do
       const ask = unknown.map(x => x.text).join('. ');
       try {
-        const rewritten = fromModel(await smartRewrite(ask, aiStatus)), extra = brainPlan(rewritten).filter(x => x.type !== 'unknown');
+        const out = await smartRewrite(ask, aiStatus, ui.smartSize ?? 'fast');
+        if (out.kind !== (ui.smartSize ?? 'fast')) ui.smartSize = out.kind;  // the best one didn't fit this graphics card
+        const rewritten = fromModel(out.text), extra = brainPlan(rewritten).filter(x => x.type !== 'unknown');
         steps = [...steps.filter(x => x.type !== 'unknown'), ...extra];
         said.push(extra.length ? `the smart brain read "${ask}" as: ${rewritten}` : `✗ the smart brain couldn't turn "${ask}" into anything BeatLab can do`);
       } catch (e) { said.push(`✗ the smart brain didn't run: ${e.message}`); }
@@ -908,7 +913,14 @@ function toggleSmart() {
   if (!ui.smart && !smartAvailable()) return toast("The smart brain needs WebGPU, which this browser doesn't have. Chrome or Edge on a PC with a graphics card can run it.");
   ui.smart = !ui.smart;
   save();
-  toast(ui.smart ? 'Smart brain on. When the brain doesn’t understand part of a request, a small free AI model on this computer (Qwen 2.5, about 1 GB, downloaded the first time) rewrites it into commands BeatLab knows. It can only do what the brain can do, and you see what it read.' : 'Smart brain off.');
+  toast(ui.smart ? `Smart brain on. When the brain doesn’t understand part of a request, a free AI model on this computer (Qwen 2.5, ${SMART_MODELS[ui.smartSize ?? 'fast'].size}, downloaded the first time) rewrites it into commands BeatLab knows. It can only do what the brain can do, and you see what it read.` : 'Smart brain off.');
+}
+function toggleSmartSize() {
+  if (!smartAvailable()) return toast("The smart brain needs WebGPU, which this browser doesn't have. Chrome or Edge on a PC with a graphics card can run it.");
+  ui.smartSize = ui.smartSize === 'best' ? 'fast' : 'best';
+  ui.smart = true;
+  save();
+  toast(ui.smartSize === 'best' ? 'Best smart brain on: Qwen 2.5 7B, about 5 GB the first time. It needs a graphics card with about 6 GB of memory; if yours can’t hold it, BeatLab switches back to the fast one by itself.' : 'Fast smart brain on: Qwen 2.5 1.5B, about 1 GB.');
 }
 const askBrain = () => palette({ items: commands(), parse: q => parseCommand(q) ?? brainItem(q), placeholder: 'Tell the brain what to do, like "darker chords, 808 slides every 4 bars and humanize the drums"' });
 // A drummer's feel, variations and fills for the pattern you're in
@@ -971,7 +983,8 @@ function newPartMenu(anchor) {
     { label: `AI drums for ${pat().name}`, hint: 'From bars 1 and 2', icon: 'brain', onSelect: aiDrumsButton },
     { label: 'Tell the brain…', hint: 'Ctrl+K', icon: 'brain', onSelect: askBrain },
     { label: 'Hum a melody', hint: 'Into the microphone', icon: 'mic', onSelect: startHum },
-    { label: 'Smart brain for anything it doesn’t know', hint: 'Free, 1 GB once', active: ui.smart, onSelect: toggleSmart },
+    { label: 'Smart brain for anything it doesn’t know', hint: `Free, ${SMART_MODELS[ui.smartSize ?? 'fast'].size} once`, active: ui.smart, onSelect: toggleSmart },
+    { label: 'Best smart brain', hint: 'Understands much more; needs a strong graphics card, 5 GB once', active: ui.smartSize === 'best', onSelect: toggleSmartSize },
     { label: 'Humanize the drums', hint: 'A drummer\'s feel', icon: 'brain', onSelect: aiHumanizeButton },
     { label: 'Vary the drums', hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('drums') },
     { label: `Vary ${trackName(melodic())}`, hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('melody') },
@@ -3357,6 +3370,8 @@ function chatEntry(e) {
     e.text ? h('p', {}, e.text) : null,
     e.said?.length ? h('ul', { class: 'said' }, e.said.map(s => h('li', { class: s.startsWith('✗') ? 'no' : '' }, s.replace(/^[✓✗] /, '')))) : null,
     e.diff?.length ? h('div', { class: 'diff' }, h('small', {}, 'What changed'), h('ul', {}, e.diff.map(d => h('li', {}, d)))) : null,
+    e.ideas?.length ? h('div', { class: 'chat-ideas' }, h('small', {}, 'Closest things I can do:'), ...e.ideas.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x)),
+      !ui.smart && smartAvailable() ? h('button', { class: 'btn small', title: 'A free AI model on this computer reads what the rules don’t', onclick: () => { toggleSmart(); sendChat(e.ask); } }, 'Ask the smart brain instead') : null) : null,
     live ? h('div', { class: 'review' },
       h('button', { class: 'key primary btn', onclick: () => reviewChat(e, 'keep') }, 'Keep'),
       h('button', { class: 'btn', onclick: () => reviewChat(e, 'undo') }, 'Undo'),
@@ -3458,7 +3473,8 @@ async function sendChat(text) {
     $('#chat-send').disabled = false;
     const after = songJSON();
     if (before !== after) commit(after);  // the history usually catches up a moment later; Keep, Undo and A/B need it now
-    log.push(r ? { who: 'brain', said: r.said, diff: before === after ? [] : diffSongs(JSON.parse(before), JSON.parse(after)), at: before === after ? null : history.at } : { who: 'brain', text: 'I’m still busy with the last request. Try again in a moment.' });
+    const lost = r?.said.some(s => s.startsWith('✗ Didn’t') || s.startsWith("✗ Didn't") || s.includes("couldn't turn"));
+    log.push(r ? { who: 'brain', said: r.said, diff: before === after ? [] : diffSongs(JSON.parse(before), JSON.parse(after)), at: before === after ? null : history.at, ...(lost ? { ideas: closest(text), ask: text } : {}) } : { who: 'brain', text: 'I’m still busy with the last request. Try again in a moment.' });
   }
   log.splice(0, Math.max(0, log.length - 40));
   save();

@@ -92,13 +92,15 @@ export const aiReady = name => !!models[name];
 // It never touches the studio itself. It only rewrites a request the rules didn't understand into the
 // plain commands they do, so it can't do anything the brain couldn't already do, and you see the result.
 const WEBLLM = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/+esm';
-export const SMART_MODEL = 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC';  // Apache-2.0, about 1 GB, runs on the graphics card (WebGPU)
-let llm = null;
+// Both Apache-2.0 and run on the graphics card (WebGPU). Best understands far more but needs about 5 GB of graphics memory.
+export const SMART_MODELS = { fast: { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', size: 'about 1 GB' }, best: { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', size: 'about 5 GB' } };
+let llm = null, llmKind = null;
 export const smartAvailable = () => typeof navigator !== 'undefined' && !!navigator.gpu;
-function smartEngine(status) {
+function smartEngine(kind, status) {
+  if (llmKind !== kind) { llm?.then(e => e.unload()).catch(() => {}); llm = null; llmKind = kind; }
   llm ??= (async () => {
-    const webllm = await import(WEBLLM);
-    return webllm.CreateMLCEngine(SMART_MODEL, { initProgressCallback: p => status?.(`Loading the smart brain: ${Math.round((p.progress ?? 0) * 100)}% (about 1 GB, only the first time)`) });
+    const webllm = await import(WEBLLM), m = SMART_MODELS[kind];
+    return webllm.CreateMLCEngine(m.id, { initProgressCallback: p => status?.(`Loading the smart brain: ${Math.round((p.progress ?? 0) * 100)}% (${m.size}, only the first time)`) });
   })().catch(e => { llm = null; throw e; });
   return llm;
 }
@@ -110,20 +112,29 @@ add 808 slides every <n> bars | add hat rolls every <n> bars
 mute the <part> | unmute the <part> | solo the <part> | louder <part> by <n> db | quieter <part> by <n> db | pan the <part> <left|right|center>
 make the <part> <darker|brighter|warmer|grittier|wider|narrower> | more reverb on the <part> | drier <part> | add echo to the <part>
 add <reverb|delay|drive|tape|chorus|phaser|flanger|bitcrush|compressor|limiter|gate|auto-pan|vocoder|stereo width|parametric eq> to the <part> | remove <effect> from the <part>
-balance the mix | export an mp3 | play | stop
-Parts: kick, snare, hats, open hat, perc, 808, chords, arp, melody, drums, mix.
+make the <part> a <piano|electric piano|organ|pad|strings|guitar|sitar|pluck|bell|flute|synth|brass|reese bass|acid bass> | duck the <part> under the kick
+half-time the <part> | stutter the <part> | tape stop at the end | autotune the vocals | make the drums hit harder | make it sound old
+balance the mix | check my mix | turn this into a full song | hum a melody | export an mp3 | play | stop
+Parts: kick, snare, hats, open hat, perc, 808, chords, arp, melody, drums, vocals, mix.
 Leave out anything these commands can't do.`;
 const EXAMPLES = [
   ['it feels empty, give it more bounce and make it hit harder', 'busier drums\nmore swing\nlouder kick by 2 db\nmake the 808 grittier'],
   ['something for a sad late night drive', 'make a lofi beat\nmake it minor\nmake the chords darker\nmore reverb on the melody'],
   ['the hats are annoying', 'quieter hats by 4 db\nmake the hats darker'],
 ].flatMap(([u, a]) => [{ role: 'user', content: u }, { role: 'assistant', content: a }]);
-export async function smartRewrite(text, status) {
+// Returns the commands and which model wrote them: Best falls back to Fast when the graphics card can't hold it
+export async function smartRewrite(text, status, kind = 'fast') {
   if (!smartAvailable()) throw new Error("this browser can't run it (no WebGPU). Chrome or Edge on a PC with a graphics card can");
-  const engine = await smartEngine(status);
+  let engine;
+  try { engine = await smartEngine(kind, status); } catch (e) {
+    if (kind !== 'best') throw e;
+    status?.("This graphics card can't hold the best smart brain, so the fast one is loading instead…");
+    kind = 'fast';
+    engine = await smartEngine(kind, status);
+  }
   status?.('The smart brain is thinking…');
   const r = await engine.chat.completions.create({ messages: [{ role: 'system', content: GUIDE }, ...EXAMPLES, { role: 'user', content: text }], temperature: 0.2, max_tokens: 160 });
-  return r.choices[0]?.message?.content ?? '';
+  return { text: r.choices[0]?.message?.content ?? '', kind };
 }
 
 // ---------- MusicVAE: variations and a drummer's feel, two bars at a time ----------
