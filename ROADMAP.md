@@ -108,5 +108,10 @@
    pitch shifter and a transient shaper; an acid bass; favourites; the mix doctor (doctor.js: eight measured
    rules, a score out of 100, one-click fixes; the starter beat goes from 33 to 94); humming to notes
    (hum.js); the brain learned the new effects, the doctor and humming (70 phrasings).
+   **AI-native, like a code editor for beats (2026-10-29):** autocomplete (write a few notes or steps, pause,
+   and the AI suggests what comes next; Tab keeps it), the brain chat (Ctrl+I: knows the project, lists what
+   changed, Keep, Undo and A/B, answers questions, @mentions, edits only the selected notes), and a phone and
+   tablet layout with a tab bar. Next: an agent that turns a loop into a full song step by step, and a
+   bigger optional local model for the chat.
 5. **Depth:** every synth voice on the audio thread for lower CPU, sends between inserts, ghost channels,
    collaboration from a shared link, a brain that learns from your past beats, and more of FL's long tail.

@@ -24,6 +24,11 @@ Try it in your browser: **https://droolbot.github.io/beatlab/**. How to use it: 
   - **Transient shaper:** more punch or a shorter tail
 - **Sounds.** BeatLab ships its own kits (Trap, Drill, Lofi, Boom Bap, House), 808s and loops. If FL Studio is installed, BeatLab also plays FL's own packs from your install, on the website too: multi-sampled instruments, and drum kits with velocity layers.
 - **The brain.** Ctrl+K takes requests like "make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4". It shows the plan, then does it as one undo. For drums it uses Google's free Magenta models to humanize, write variations and play fills. An optional smart mode runs a small language model (Qwen2.5 1.5B) inside your browser to understand sentences the rules don't.
+- **Brain chat** (Ctrl+I). A side panel, like a code editor's AI assistant, that knows your channels, patterns, key and mix.
+  - After each request it shows what changed, with **Keep**, **Undo** and **A/B** (hear before and after while it plays).
+  - It answers questions about the beat, takes @mentions, and changes only the selected notes when you've selected some.
+- **Agent.** “Turn this loop into a full song” builds intro, verse, hook, bridge and outro from one pattern, lays them out, adds a fill and balances the mix, all as one undo.
+- **Autocomplete.** Write a few notes or drum steps and pause. The AI suggests what comes next as faint notes: **Tab** keeps them, **Esc** drops them.
 - **The mix doctor.** It listens to your beat part by part and scores it out of 100. It checks:
   - the frequency balance against a finished mix
   - the kick fighting the 808

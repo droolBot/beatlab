@@ -64,7 +64,8 @@ export function plan(input, ctx) {
     const section = sectionOf(t);
     const push = (type, o = {}) => steps.push({ type, ...o, ...(section ? { section } : {}) });
     let m;
-    if (/\b(stop|pause)\b/.test(t) && !/\b(drums? stop|tape ?stop)\b/.test(t)) push('stop');
+    if (/\b(full song|whole song|complete song|into a song|song out of|arrange (it|this|the beat)|song structure|build (a|the) song)\b/.test(t)) push('agent', { task: 'song' });
+    else if (/\b(stop|pause)\b/.test(t) && !/\b(drums? stop|tape ?stop)\b/.test(t)) push('stop');
     else if (/^ (play|start)( it| the beat| the song| playing)? $/.test(t) || /\bplay (the )?(beat|song|hook|it)\b/.test(t)) push('play');
     else if ((m = t.match(/\b(make|create|give me|start|cook up|new)\b.*?\b(trap|drill|r ?& ?b|rnb|lo-?fi|boom ?bap|afro(beats?)?|amapiano|house|reggaeton|phonk|pop|desi( hip-?hop)?)\b(?:.*?(\d{2,3}) ?(?:bpm)?)?/))) {
       const name = m[2].replace(/\s/g, '');
@@ -184,6 +185,7 @@ export function describe(step, names = {}) {
     case 'hatRolls': return `Add hi-hat rolls every ${step.every} bar${step.every === 1 ? '' : 's'}${where}`;
     case 'automix': return 'Balance the mix';
     case 'doctor': return 'Check the mix with the mix doctor';
+    case 'agent': return 'Turn this pattern into a full song: intro, verse, hook, bridge and outro, with a fill and a balanced mix';
     case 'hum': return 'Listen to you hum a melody and write it down';
     case 'export': return `Open the export, ${step.fmt.toUpperCase()}`;
     case 'regen': return `New ${step.part}`;

@@ -568,6 +568,39 @@
   @media (max-width: 1320px) { .brand b { display: none; } .devices { grid-template-columns: 540px minmax(0, 1fr); } .devices .deck { display: none; } }
   @media (max-height: 900px) { :root { --deck-h: 250px; --gap: 10px; } .window { grid-template-rows: 44px minmax(0, 1fr); } .top { padding: 7px 14px; } .lcd, .tkey { height: 36px; } .brain-body { row-gap: 8px; } .brain-screen .lcd.big, .k3d { height: 84px; } .make, .newpart, .style-name, .opt { height: 38px; } }
 
+  /* the chat: a panel down the right, like a code editor's assistant */
+  .chatbtn { height: 36px; gap: 7px; padding: 0 12px; border-radius: 10px; font-size: 12.5px; }
+  .chatbtn .icon { color: var(--accent); }
+  .chat { position: fixed; z-index: 60; top: 12px; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); grid-template-rows: 48px minmax(0, 1fr) auto; box-shadow: 0 30px 80px rgba(0,0,0,0.55); }
+  .chat .chat-sub { color: var(--subtle); font-size: 11px; }
+  .chat-log { overflow-y: auto; padding: 4px 14px 12px; display: grid; align-content: start; gap: 10px; }
+  .chat-hello { display: grid; gap: 10px; padding: 10px 2px; }
+  .chat-hello b { font-weight: 500; font-size: 14px; }
+  .chat-hello p { margin: 0; color: var(--muted); line-height: 1.55; }
+  .chat-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chat-ideas .btn { height: auto; min-height: 30px; padding: 6px 10px; white-space: normal; text-align: left; }
+  .msg { padding: 10px 12px; border-radius: 12px; line-height: 1.5; max-width: 92%; }
+  .msg.you { justify-self: end; background: var(--key-on); box-shadow: var(--sh-press); }
+  .msg.brain { justify-self: start; background: var(--well); box-shadow: var(--sh-well); display: grid; gap: 8px; }
+  .msg p { margin: 0; }
+  .msg ul { margin: 0; padding-left: 18px; display: grid; gap: 3px; }
+  .msg .said li.no { color: var(--subtle); }
+  .msg .diff { border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 4px; }
+  .msg .diff small, .msg .state { color: var(--subtle); font-size: 11px; }
+  .msg .diff li { font-variant-numeric: tabular-nums; }
+  .msg .review { display: flex; flex-wrap: wrap; gap: 6px; }
+  .msg .review .btn { height: 32px; padding: 0 12px; border-radius: 9px; }
+  .chat-box { display: grid; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+  .chat-ctx { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chat-ctx span { font-size: 11px; color: var(--subtle); padding: 3px 8px; border-radius: 999px; background: var(--well); }
+  .chat-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+  .chat-row textarea { resize: none; min-height: 44px; max-height: 140px; padding: 10px 12px; border-radius: 10px; line-height: 1.45; }
+  .chat-row .key { height: 44px; padding: 0 16px; border-radius: 10px; }
+  html.phone .chat { inset: 0; width: auto; border-radius: 0; border: 0; z-index: 88; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html.phone .chatbtn span { display: none; }
+  html.phone .chatbtn { width: 40px; height: 40px; padding: 0; justify-content: center; order: 1; margin-left: auto; }
+  html.phone #more { margin-left: 0; }
+
   /* autocomplete: the AI's suggestion, shown faintly until you keep it */
   .step.ghost { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   .step.ghost::after { background: var(--accent); opacity: 0.45; }
@@ -687,6 +720,7 @@
   <button class="iconbtn" id="help" title="Shortcuts and help (F1)" aria-label="Help"></button>
   <button id="theme" class="iconbtn" aria-label="Switch between dark and white studio" title="Dark or white studio"></button>
   <div class="readout" id="master-k"></div>
+  <button class="btn chatbtn" id="chat-btn" title="Chat with the brain (Ctrl+I): it knows this project, and you review every change"></button>
   <button class="iconbtn" id="more" aria-haspopup="menu" aria-label="More" title="More"></button>
   <button id="export" class="key primary" style="height:40px;padding:0 16px;border-radius:10px"></button>
 </header>
@@ -790,6 +824,11 @@
   <span class="dotted" id="save-state">Autosave on</span>
 </footer>
 
+<aside class="chat window" id="chat" aria-label="Chat with the brain" hidden>
+  <div class="wtitle"><span class="wname">Brain chat</span><small class="chat-sub">Knows this project · runs on this computer</small><span class="grow"></span><button class="iconbtn" id="chat-close" aria-label="Close the chat" title="Close (Esc)">✕</button></div>
+  <div class="chat-log" id="chat-log" aria-live="polite"></div>
+  <form class="chat-box" id="chat-form"><div class="chat-ctx" id="chat-ctx"></div><div class="chat-row"><textarea id="chat-in" rows="2" placeholder="Ask or tell the brain anything. @ names a channel or pattern." aria-label="Message the brain"></textarea><button class="key primary" id="chat-send" type="submit">Send</button></div></form>
+</aside>
 <div class="suggest" id="suggest" role="status" hidden><span class="dot-led on"></span><b>Suggested notes</b><button class="btn small" id="sg-keep" title="Keep the suggestion (Tab)">Keep <kbd>Tab</kbd></button><button class="iconbtn" id="sg-drop" aria-label="Drop the suggestion" title="Drop it (Esc)">✕</button></div>
 <nav class="tabbar" id="tabbar" aria-label="Studio"></nav>
 <div class="window plugin" id="plugin" hidden></div>

@@ -186,6 +186,17 @@
       <p>Press <kbd>Ctrl+K</kbd> (or <b>Ask</b> in the Brain panel) and type a request in plain words. The brain shows you its plan first. Press <kbd>Enter</kbd> and it does it as ordinary edits you can change. One <kbd>Ctrl+Z</kbd> takes the whole request back. Join several requests with commas or “and”.</p>
       <p>These are real examples. Each shows what the brain says it will do:</p>
       <div class="say" id="brain-examples"><div><code>make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4 bars</code><ul><li>Make a new Drill beat at 142 BPM</li><li>Add 808 slides every 2 bars</li><li>Add hi-hat rolls every 4 bars</li></ul></div></div>
+      <h3>The chat <kbd>Ctrl+I</kbd></h3>
+      <p>The <b>Chat</b> button in the top bar opens the brain as a panel down the right. You can also use <b>Ask</b> in the Brain panel, or Ctrl+I. It knows your channels, patterns, key and mix, and it keeps the conversation.</p>
+      <ul>
+        <li>After every request it lists <b>what changed</b>, for example “Tempo 87 → 140 BPM” or “Snare: + Reverb, −2.0 dB”. Press <b>Keep</b> or <b>Undo</b>. <b>A/B</b> switches between before and after, even while the beat plays.</li>
+        <li>Ask about the beat: “what key is this in?”, “which effects are on?”, “how long is the song?”, “what can you do?”</li>
+        <li>Type <b>@</b> to name a channel or a pattern.</li>
+        <li><b>“Turn this loop into a full song”</b> builds the song for you, step by step. It makes an intro, a verse with new drums and no lead (room for a vocal), the hook (your loop), a bridge and an outro. It lays them out, adds a fill into the hook, balances the mix and lists every change. One Undo takes it all back.</li>
+        <li><b>Select notes</b> in the piano roll first, and the request changes only those: “up an octave”, “humanize”, “quantize”, “louder”, “shorter”, “legato”, “reverse”, “delete”.</li>
+      </ul>
+      <h3>Autocomplete</h3>
+      <p>Write a few notes of a melody or bass line in the piano roll, or a few steps in the channel rack, then pause. The AI suggests what comes next, faintly: a dashed outline in the roll, dashed steps in the rack. Press <kbd>Tab</kbd> (or <b>Keep</b> on the card) to add it, or <kbd>Esc</kbd> to drop it. Keep going and the next suggestion follows. Melodies follow the chords, and drums finish the bar you’re writing. <b>Suggest</b> in the piano roll turns it off and on.</p>
       <p class="note"><b>The smart brain.</b> For anything the brain doesn’t understand, turn on <b>Smart brain</b> in the New part menu. A small free AI model (Qwen 2.5) then rewrites your request into commands BeatLab knows. It downloads once, about 1 GB, and needs a browser with WebGPU, like current Chrome or Edge. It runs on your computer, and it can only do what the brain can do.</p>
       <p>The free Magenta models from Google do the musical parts: <b>Humanize</b> gives programmed drums a drummer’s timing, <b>Vary</b> writes a variation (press again for the next), and <b>Fill</b> plays a drum fill.</p>
     </section>

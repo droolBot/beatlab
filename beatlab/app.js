@@ -850,6 +850,7 @@ async function runStep(st) {
     case 'hatRolls': return addHatRolls(st.every, pid);
     case 'automix': return autoMix(false);
     case 'doctor': return mixDoctor();
+    case 'agent': { const note = await songAgent(); showView('arrange'); return note; }
     case 'hum': return startHum();
     case 'export': return openExport(st.fmt === 'mp3' ? { mp3: true } : st.fmt === 'midi' ? { mix: false, stems: false } : st.fmt === 'stems' ? { stems: true } : {});
     case 'regen': song = regenerate(song, st.part); return changed();
@@ -868,7 +869,7 @@ async function runStep(st) {
     default: return null;
   }
 }
-async function runBrain(text) {
+async function runBrain(text, { quiet = false } = {}) {
   if (busy) return hint('The brain is still busy with the last request. Try again in a moment.');
   let steps = brainPlan(text);
   const names = brainNames(), said = [];
@@ -899,7 +900,9 @@ async function runBrain(text) {
   changed();
   const ok = said.filter(x => x.startsWith('✓')).length;
   aiStatus(said.join('  ·  '));
-  toast(`${ok} of ${steps.length} done: ${said.join('; ')}.${ok ? ' Ctrl+Z undoes all of it.' : ''}`);
+  if (!quiet) toast(`${ok} of ${steps.length} done: ${said.join('; ')}.${ok ? ' Ctrl+Z undoes all of it.' : ''}`);
+  renderChat();
+  return { said, ok };
 }
 function toggleSmart() {
   if (!ui.smart && !smartAvailable()) return toast("The smart brain needs WebGPU, which this browser doesn't have. Chrome or Edge on a PC with a graphics card can run it.");
@@ -3279,6 +3282,210 @@ async function cleanUpAudio() {
 
 
 
+
+
+// ---------- the agent: one pattern becomes a whole song, step by step, as one undo ----------
+// Intro, verse, hook, verse, bridge, hook, outro, each a copy of the loop with parts taken out or varied
+// the way producers build an arrangement, then a fill into the hook and a balanced mix.
+async function songAgent() {
+  const src = pat(), bars = src.bars ?? 8, kinds = k => t => k.includes(t.kind), done = [];
+  const section = (name, keep) => {
+    const id = newPatternId(song);
+    song.patterns.push({ id, name, bars, color: PATTERN_COLORS[song.patterns.length % PATTERN_COLORS.length] });
+    for (const t of song.tracks) if (t[src.id] && keep(t)) t[id] = structuredClone(t[src.id]);
+    return id;
+  };
+  aiStatus('Writing the sections…');
+  const intro = section('Intro', kinds(['chords', 'melody', 'texture', 'fx']));
+  const verse = section('Verse', kinds(['drum', 'bass', 'chords', 'texture']));  // no lead: room for a vocal
+  const bridge = section('Bridge', t => ['chords', 'melody', 'texture'].includes(t.kind) || t.id === 'hat');
+  const outro = section('Outro', kinds(['chords', 'texture']));
+  done.push('intro, verse, bridge and outro from the loop');
+  try { await varyIn('drums', verse); done.push('new drums for the verse'); } catch { /* offline: the verse keeps the loop's drums */ }
+  try { await fillIn(verse); done.push('a fill into the hook'); } catch { /* offline */ }
+  aiStatus('Laying out the song…');
+  const order = [['Intro', intro], ['Verse', verse], ['Hook', src.id], ['Verse 2', verse], ['Bridge', bridge], ['Hook', src.id], ['Outro', outro]];
+  const rows = [...new Set(order.map(([, id]) => id))];
+  song.playlist.clips = song.playlist.clips.filter(c => c.type !== 'pattern');
+  song.markers = [];
+  order.forEach(([name, id], i) => {
+    song.playlist.clips.push({ id: clipId(), type: 'pattern', pattern: id, row: rows.indexOf(id), t: i * bars * BAR, d: bars * BAR });
+    song.markers.push({ t: i * bars * BAR, name });
+  });
+  if (src.name !== 'Hook' && !song.patterns.some(p => p !== src && p.name === 'Hook')) src.name = 'Hook';
+  done.push(`${order.length} sections, ${order.length * bars} bars`);
+  aiStatus('Balancing the mix…');
+  try { await autoMix(false); done.push('a balanced mix'); } catch { /* the levels stay as they were */ }
+  ui.mode = 'song';
+  ui.cursor = 0;
+  return done.join(', ');
+}
+
+// ---------- the chat: the brain as a side panel that knows the project; every change can be reviewed ----------
+const CHAT_IDEAS = ['Make a drill beat at 142 with 808 slides every 2 bars', 'Turn this loop into a full song', 'What key is this in?', 'Half-time the hats on the last beat', 'Check my mix', 'Hum a melody'];
+const chatLog = () => (ui.chat ??= []);
+function openChat(prefill = '') {
+  $('#chat').hidden = false;
+  document.documentElement.classList.add('chat-open');
+  renderChat();
+  const i = $('#chat-in');
+  if (prefill) i.value = prefill;
+  i.focus();
+}
+function closeChat() { $('#chat').hidden = true; document.documentElement.classList.remove('chat-open'); }
+const toggleChat = () => ($('#chat').hidden ? openChat() : closeChat());
+function chatContext() {  // what the brain is looking at, shown above the box
+  const bits = [`${STYLES[song.style].name} · ${NOTES[song.root]} ${song.mode} · ${song.bpm} BPM`, pat()?.name ?? ''];
+  if (rollSel.size && showing('roll')) bits.push(`${rollSel.size} selected in ${trackName(track(ui.selected))}`);
+  return bits.filter(Boolean).map(b => h('span', {}, b));
+}
+function renderChat() {
+  if ($('#chat').hidden) return;
+  const log = $('#chat-log'), list = chatLog();
+  const welcome = h('div', { class: 'chat-hello' },
+    h('b', {}, 'Ask the brain anything about this beat.'),
+    h('p', {}, 'It knows your channels, patterns, key and mix. It shows what it changed, and you choose Keep or Undo, or A/B to hear before and after. Type @ to name a channel or pattern. Select notes in the piano roll to change only those.'),
+    h('div', { class: 'chat-ideas' }, CHAT_IDEAS.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x))));
+  log.replaceChildren(...(list.length ? list.map(chatEntry) : [welcome]));
+  log.scrollTop = log.scrollHeight;
+  $('#chat-ctx').replaceChildren(...chatContext());
+}
+function chatEntry(e) {
+  if (e.who === 'you') return h('div', { class: 'msg you' }, e.text);
+  const live = e.at != null && !e.state && (history.at === e.at || history.at === e.at - 1);
+  return h('div', { class: 'msg brain' },
+    e.text ? h('p', {}, e.text) : null,
+    e.said?.length ? h('ul', { class: 'said' }, e.said.map(s => h('li', { class: s.startsWith('✗') ? 'no' : '' }, s.replace(/^[✓✗] /, '')))) : null,
+    e.diff?.length ? h('div', { class: 'diff' }, h('small', {}, 'What changed'), h('ul', {}, e.diff.map(d => h('li', {}, d)))) : null,
+    live ? h('div', { class: 'review' },
+      h('button', { class: 'key primary btn', onclick: () => reviewChat(e, 'keep') }, 'Keep'),
+      h('button', { class: 'btn', onclick: () => reviewChat(e, 'undo') }, 'Undo'),
+      h('button', { class: 'btn', 'aria-pressed': history.at === e.at - 1, title: 'Switch between before and after, even while it plays', onclick: () => reviewChat(e, 'ab') }, history.at === e.at - 1 ? 'Hearing before' : 'A/B')) : null,
+    e.state ? h('small', { class: 'state' }, e.state === 'kept' ? 'Kept.' : 'Undone.') : null);
+}
+function reviewChat(e, what) {
+  if (what === 'ab') { if (history.at === e.at) stepHistory(-1); else if (history.at === e.at - 1) stepHistory(1); }
+  if (what === 'keep') { if (history.at === e.at - 1) stepHistory(1); e.state = 'kept'; }
+  if (what === 'undo') { if (history.at === e.at) stepHistory(-1); e.state = 'undone'; }
+  save();
+  renderChat();
+}
+// What a request changed, in words: tempo, key, notes per channel, effects, levels, sounds
+function diffSongs(a, b) {
+  const out = [], pats = [...new Set([...a.patterns, ...b.patterns].map(p => p.id))];
+  if (a.bpm !== b.bpm) out.push(`Tempo ${a.bpm} → ${b.bpm} BPM`);
+  if (a.root !== b.root || a.mode !== b.mode) out.push(`Key ${NOTES[a.root]} ${a.mode} → ${NOTES[b.root]} ${b.mode}`);
+  if (a.style !== b.style) out.push(`Style ${STYLES[a.style]?.name} → ${STYLES[b.style]?.name}`);
+  if (Math.abs((a.swing ?? 0) - (b.swing ?? 0)) > 0.004) out.push(`Swing ${Math.round((a.swing ?? 0) * 200)}% → ${Math.round((b.swing ?? 0) * 200)}%`);
+  for (const tb of b.tracks) {
+    const ta = a.tracks.find(t => t.id === tb.id), bits = [];
+    if (!ta) { out.push(`New channel: ${trackName(tb)}`); continue; }
+    let plus = 0, minus = 0;
+    for (const p of pats) {
+      const na = (ta[p] ?? []).map(n => JSON.stringify(n)), nb = (tb[p] ?? []).map(n => JSON.stringify(n)), sa = new Set(na), sb = new Set(nb);
+      plus += nb.filter(x => !sa.has(x)).length;
+      minus += na.filter(x => !sb.has(x)).length;
+    }
+    if (plus || minus) bits.push([plus && `+${plus}`, minus && `−${minus}`].filter(Boolean).join(' ') + ' notes');
+    const fa = ta.fx.map(f => f.type), fb = tb.fx.map(f => f.type);
+    fb.filter(x => !fa.includes(x)).forEach(x => bits.push(`+ ${EFFECTS[x]?.name ?? x}`));
+    fa.filter(x => !fb.includes(x)).forEach(x => bits.push(`− ${EFFECTS[x]?.name ?? x}`));
+    if (fa.join() === fb.join() && JSON.stringify(ta.fx) !== JSON.stringify(tb.fx)) bits.push('effect settings');
+    const dv = 20 * Math.log10(Math.max(1e-4, tb.vol) / Math.max(1e-4, ta.vol));
+    if (Math.abs(dv) >= 0.5) bits.push(`${dv > 0 ? '+' : ''}${dv.toFixed(1)} dB`);
+    if (ta.pan !== tb.pan) bits.push('pan');
+    if (!!ta.mute !== !!tb.mute) bits.push(tb.mute ? 'muted' : 'unmuted');
+    if ((ta.duck ?? 0) !== (tb.duck ?? 0)) bits.push('ducked under the kick');
+    if (ta.sound !== tb.sound || ta.inst?.name !== tb.inst?.name) bits.push(`now ${soundLabel(tb)}`);
+    if (bits.length) out.push(`${trackName(tb)}: ${bits.join(', ')}`);
+  }
+  for (const ta of a.tracks) if (!b.tracks.some(t => t.id === ta.id)) out.push(`Removed ${trackName(ta)}`);
+  const newPats = b.patterns.filter(p => !a.patterns.some(q => q.id === p.id)).map(p => p.name);
+  if (newPats.length) out.push(`New patterns: ${newPats.join(', ')}`);
+  if (a.playlist.clips.length !== b.playlist.clips.length || JSON.stringify(a.playlist.clips.map(c => [c.pattern, c.t])) !== JSON.stringify(b.playlist.clips.map(c => [c.pattern, c.t]))) out.push(`Playlist: ${b.playlist.clips.filter(c => c.type === 'pattern').length} pattern clips, ${Math.ceil(songLength(b) / BAR)} bars`);
+  if (JSON.stringify(a.master) !== JSON.stringify(b.master)) out.push('Master chain');
+  return out;
+}
+// Questions about the project get answers, not edits
+function answerQuestion(q) {
+  const t = q.toLowerCase();
+  if (!/\?\s*$|^(what|which|how many|how long|how fast|tell me|list|show me|explain)\b/.test(t.trim()) || /\b(make|add|turn|set|change|mute|remove)\b/.test(t)) return null;
+  const parts = song.tracks.filter(x => x.kind !== 'bus');
+  if (/\b(what can you|help|commands?|what do you)\b/.test(t)) return 'I can make a beat in any of the 12 styles, change the tempo, key or swing, rewrite or vary a part, add slides, rolls and fills, mute, pan or level channels, add any effect (half-time, tape stop, auto-tune and more), balance and check the mix, write down a melody you hum, and export. Select notes in the piano roll and I change only those.';
+  if (/\b(key|scale)\b/.test(t)) return `${NOTES[song.root]} ${song.mode}. The notes in key are ${songScale(song).sort((x, y) => (x - song.root + 12) % 12 - (y - song.root + 12) % 12).map(p => NOTES[p]).join(', ')}.`;  // from the tonic
+  if (/\b(tempo|bpm|how fast|speed)\b/.test(t)) return `${song.bpm} BPM, with ${Math.round((song.swing ?? 0) * 200)}% swing.`;
+  if (/\b(style|genre)\b/.test(t)) return `${STYLES[song.style].name}, which usually sits between ${STYLES[song.style].bpm?.join?.(' and ') ?? 'its usual tempos'} BPM.`;
+  if (/\b(chords?|progression)\b/.test(t)) return `In ${pat().name}: ${[...new Set(song.harmony.filter(c => c.t < barsOf(ui.pattern) * BAR).map(c => c.name))].join(', ')}.`;
+  if (/\b(patterns?|sections?|structure|arrangement|how long|length)\b/.test(t)) return `${song.patterns.length} patterns: ${song.patterns.map(p => p.name).join(', ')}. The whole song is ${Math.ceil(songLength(song) / BAR)} bars, about ${clock(songLength(song) * spt())}.`;
+  if (/\b(channels?|tracks?|sounds?|instruments?|parts?)\b/.test(t)) return `${parts.length} channels: ${parts.map(x => `${trackName(x)} (${soundLabel(x)}${x.mute ? ', muted' : ''})`).join(', ')}.`;
+  if (/\b(effects?|plugins?)\b/.test(t)) { const on = parts.filter(x => x.fx.length); return on.length ? on.map(x => `${trackName(x)}: ${x.fx.map(f => EFFECTS[f.type]?.name ?? f.type).join(', ')}`).join('. ') + '.' : 'No insert effects yet. Try "add reverb to the snare".'; }
+  return null;
+}
+// Selected notes in the piano roll: the request changes only those (like editing a selection in code)
+function selectionEdit(q) {
+  if (!rollSel.size || !showing('roll')) return null;
+  const t = track(ui.selected), f = editable(t), list = [...rollSel], s = q.toLowerCase();
+  const semis = /octave/.test(s) ? 12 : +(s.match(/\b(\d{1,2})\b/)?.[1] ?? 0) || (/semitone|half step/.test(s) ? 1 : /whole step/.test(s) ? 2 : 0);
+  let out = null, what = '';
+  if (/\b(up|down|higher|lower|raise|drop|transpose)\b/.test(s) && semis && !/\b(louder|quieter|softer)\b/.test(s)) { const d = (/\b(down|lower|drop)\b/.test(s) ? -1 : 1) * semis; out = list.map(n => ({ ...n, p: clamp(n.p + d, 0, 127) })); what = `moved ${d > 0 ? 'up' : 'down'} ${Math.abs(d) === 12 ? 'an octave' : `${Math.abs(d)} semitone${Math.abs(d) > 1 ? 's' : ''}`}`; }
+  else if (/\bhumani[sz]e|loosen|human\b/.test(s)) { out = humanize(list, Math.random); what = 'humanized'; }
+  else if (/\bquantize|tighten|on the grid|snap\b/.test(s)) { out = quantize(list, rollGrid()); what = 'quantized'; }
+  else if (/\b(louder|harder|softer|quieter)\b/.test(s)) { const d = /louder|harder/.test(s) ? 18 : -18; out = list.map(n => ({ ...n, v: clamp(n.v + d, 20, 127) })); what = d > 0 ? 'louder' : 'softer'; }
+  else if (/\b(shorter|staccato|choppy)\b/.test(s)) { out = list.map(n => ({ ...n, d: Math.max(STEP / 2, Math.round(n.d / 2)) })); what = 'shorter'; }
+  else if (/\b(longer|legato|connect|smooth)\b/.test(s)) { const sorted = [...list].sort((a, b) => a.t - b.t); out = list.map(n => { const next = sorted.find(m => m.t > n.t); return { ...n, d: next ? next.t - n.t : n.d * 2 }; }); what = 'made legato'; }
+  else if (/\b(reverse|backwards)\b/.test(s)) { const a = Math.min(...list.map(n => n.t)), b = Math.max(...list.map(n => n.t + n.d)); out = list.map(n => ({ ...n, t: a + b - n.t - n.d })); what = 'reversed'; }
+  else if (/\b(delete|remove|clear)\b/.test(s)) { t[f] = t[f].filter(n => !rollSel.has(n)); rollSel.clear(); changed(); return `Deleted ${list.length} notes.`; }
+  if (!out) return null;
+  const map = new Map(list.map((n, i) => [n, out[i]]));
+  t[f] = tidy(t[f].map(n => map.get(n) ?? n));
+  rollSel = new Set(out.filter(n => t[f].includes(n)));
+  changed();
+  return `${list.length} selected note${list.length > 1 ? 's' : ''} in ${trackName(t)} ${what}.`;
+}
+async function sendChat(text) {
+  text = text.trim();
+  if (!text) return;
+  $('#chat-in').value = '';
+  const log = chatLog();
+  log.push({ who: 'you', text });
+  const before = songJSON(), answer = answerQuestion(text), sel = answer ? null : selectionEdit(text);
+  if (sel) commit(songJSON());  // into the undo history now, so Keep, Undo and A/B point at this change
+  if (answer || sel) log.push({ who: 'brain', text: answer ?? sel, ...(sel && before !== songJSON() ? { diff: diffSongs(JSON.parse(before), song), at: history.at } : {}) });
+  else {
+    renderChat();
+    $('#chat-send').disabled = true;
+    const r = await runBrain(text, { quiet: true });
+    $('#chat-send').disabled = false;
+    const after = songJSON();
+    if (before !== after) commit(after);  // the history usually catches up a moment later; Keep, Undo and A/B need it now
+    log.push(r ? { who: 'brain', said: r.said, diff: before === after ? [] : diffSongs(JSON.parse(before), JSON.parse(after)), at: before === after ? null : history.at } : { who: 'brain', text: 'I’m still busy with the last request. Try again in a moment.' });
+  }
+  log.splice(0, Math.max(0, log.length - 40));
+  save();
+  renderChat();
+}
+function mentionMenu() {  // @ lists the channels and patterns to name
+  const i = $('#chat-in');
+  menu(i, [{ heading: 'Channels' }, ...song.tracks.filter(t => t.kind !== 'bus').map(t => ({ label: trackName(t), onSelect: () => insertMention(trackName(t)) })),
+    '-', { heading: 'Patterns' }, ...song.patterns.map(p => ({ label: p.name, onSelect: () => insertMention(`the ${p.name.toLowerCase()}`) }))]);
+}
+function insertMention(word) {
+  const i = $('#chat-in'), at = i.value.lastIndexOf('@');
+  i.value = `${at >= 0 ? i.value.slice(0, at) : i.value}${word} `;
+  i.focus();
+}
+function initChat() {
+  $('#chat-close').addEventListener('click', closeChat);
+  $('#chat-form').addEventListener('submit', e => { e.preventDefault(); sendChat($('#chat-in').value); });
+  $('#chat-in').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat($('#chat-in').value); }
+    if (e.key === 'Escape') closeChat();
+  });
+  $('#chat-in').addEventListener('input', e => { if (e.data === '@') mentionMenu(); });
+  $('#chat-btn').replaceChildren(icon('brain', 16), h('span', {}, 'Chat'));
+  $('#chat-btn').addEventListener('click', toggleChat);
+}
+
 // ---------- autocomplete: write a few notes or steps, pause, and the AI suggests what comes next ----------
 // Like code completion: the suggestion shows faintly, Tab (or Keep) adds it, Esc drops it, and any edit
 // asks again. Lines come from the melody model, drums from the drum model (brain.js), both in this browser.
@@ -3388,7 +3595,7 @@ function moreMenu() {
 function initPhone() {
   $('#tabbar').replaceChildren(...PHONE_TABS.map(([tab, ic, label]) => h('button', { 'data-tab': tab, onclick: () => phoneTab(tab) }, icon(ic, 22), h('span', {}, label))));
   $('#quick-grid').replaceChildren(...[
-    ['brain', 'Ask the brain', askBrain], ['mic', 'Hum it', startHum], ['brain', 'Mix doctor', () => withBusy(() => mixDoctor())], ['mixer', 'Auto mix', () => withBusy(() => autoMix())],
+    ['brain', 'Ask the brain', () => openChat()], ['mic', 'Hum it', startHum], ['brain', 'Mix doctor', () => withBusy(() => mixDoctor())], ['mixer', 'Auto mix', () => withBusy(() => autoMix())],
     ['sounds', 'Sounds', () => showView('sounds')], ['listen', 'Listen', () => showView('listen')], ['master', 'Master', () => showView('master')], ['export', 'Export', () => openExport()],
   ].map(([ic, label, run]) => h('button', { class: 'btn', onclick: run }, icon(ic, 18), label)));
   $('#more').replaceChildren(icon('more', 18));
@@ -3461,6 +3668,7 @@ function commands() {
     { group: 'Studio', label: 'Connect a MIDI keyboard', icon: 'midi', run: startMidi },
     { group: 'Studio', label: 'Shortcuts and help', icon: 'help', keys: 'F1', run: openHelp },
     { group: 'Brain', label: `Autocomplete ${autocompleteOn() ? 'off' : 'on'} (the AI suggests what comes next)`, icon: 'brain', run: toggleAutocomplete },
+    { group: 'Brain', label: 'Chat with the brain', icon: 'brain', keys: 'Ctrl+I', run: () => openChat() },
     { group: 'Studio', label: 'Read the BeatLab docs', icon: 'help', run: () => window.open('docs.html', '_blank', 'noopener') },
     { group: 'Studio', label: 'Go to the home page', icon: 'left', run: () => { location.href = '/'; } },
   ];
@@ -3543,6 +3751,7 @@ function keys(e) {
   if (suggestion && e.key === 'Tab' && !mod && !e.altKey) { e.preventDefault(); return keepSuggestion(); }
   if (suggestion && e.key === 'Escape') { e.preventDefault(); return dropSuggestion(); }
   if (mod && k === 'k') { e.preventDefault(); return openPalette(); }
+  if (mod && k === 'i') { e.preventDefault(); return toggleChat(); }
   if (mod && k === 'z') { e.preventDefault(); return stepHistory(e.shiftKey ? 1 : -1); }
   if (mod && k === 'y') { e.preventDefault(); return stepHistory(1); }
   if (mod && k === 's') { e.preventDefault(); return quickVersion(); }
@@ -3652,6 +3861,7 @@ function staticChrome() {  // icons and labels that never change
   label($('#pads-title'), 'pads', 'Pads');
   label($('#deck-title'), 'record', 'Turntable');
   initPhone();
+  initChat();
   $('.display .wtitle').addEventListener('wheel', e => {  // a vertical wheel scrolls a toolbar that doesn't fit
     const w = e.currentTarget;
     if (e.target.closest('.knob') || w.scrollWidth <= w.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
@@ -3719,7 +3929,7 @@ async function init() {
   })), { width: 260 }));
   $('#theme').addEventListener('click', () => { ui.theme = ui.theme === 'light' ? 'dark' : 'light'; save(); applyTheme(); renderView(); });
   $('#ask').replaceChildren(icon('brain', 13), 'Ask');
-  $('#ask').addEventListener('click', askBrain);
+  $('#ask').addEventListener('click', () => openChat());
   $('#make').addEventListener('click', () => make());
   $('#file').addEventListener('change', e => e.target.files[0] && useFile(e.target.files[0]));
   const drop = $('#drop');

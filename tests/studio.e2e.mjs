@@ -881,6 +881,96 @@ await test('hum: a hummed phrase becomes melody notes in the key', async () => {
   assert(JSON.stringify(notes) !== JSON.stringify(before[pid]), 'the melody changed');
   return `${notes.length} notes, pitch classes ${pcs.join(' ')}`;
 });
+await test('autocomplete: write four notes, the AI suggests what comes next, Tab keeps it', async () => {
+  await ev(`document.querySelector('#plugin').hidden = true`);
+  assert(await until(`!document.querySelector('#make').disabled`, 120000), 'busy');
+  await key('F7'); await sleep(500);
+  await clickSel(`[...document.querySelectorAll('#dock-tools .picker')].find(p => p.title === 'Channel')`); await menuPick('Melody'); await sleep(400);
+  await clickSel(`[...document.querySelectorAll('#dock-tools button')].find(b => b.textContent.trim() === 'Clear')`); await sleep(400);
+  const cv = await box('.proll canvas'), pid = await ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui.pattern`), cols = (await ev(`(JSON.parse(localStorage.getItem('beatlab:v3')).song.patterns.find(p => p.id === '${pid}')?.bars ?? 8) * 16`));
+  await ev(`document.querySelector('.roll-scroll').scrollTop = 200`); await sleep(200);
+  const cv2 = await box('.proll canvas'), cw = cv2.w / cols;
+  for (const [step, dy] of [[0, 0], [4, -28], [8, -14], [12, -42]]) { await click(cv2.l + (step + 0.5) * cw, cv2.t + 260 + dy); await sleep(250); }
+  assert((track(await saved(), 'melody')[pid] ?? []).length === 4, `drew ${(track(await saved(), 'melody')[pid] ?? []).length} notes`);
+  assert(await until(`!document.querySelector('#suggest').hidden`, 90000), 'no suggestion appeared');
+  const label = await ev(`document.querySelector('#suggest b').textContent`), n = +label.match(/\d+/)[0];
+  await key('Tab'); await sleep(700);
+  const after = (track(await saved(), 'melody')[pid] ?? []).length;
+  assert(after > 4 && after <= 4 + n, `kept ${after - 4} of ${n}`);
+  assert(await ev(`document.querySelector('#suggest').hidden || /suggested/.test(document.querySelector('#suggest b').textContent)`), 'card state');
+  return `${label}; after Tab the melody has ${after} notes`;
+});
+await test('autocomplete: drums, the rest of the bar from the hits you placed', async () => {
+  await key('F6'); await sleep(400);
+  await key('F4'); await sleep(600);  // a new, empty pattern
+  for (const [ch, steps] of [['kick', [0, 3, 6]], ['hat', [0, 2, 4, 6]], ['snare', [4]]]) for (const s of steps) { await clickSel(`document.querySelectorAll('.rack .ch[data-ch=${ch}] .step')[${s}]`); await sleep(150); }
+  assert(await until(`!document.querySelector('#suggest').hidden && document.querySelectorAll('.rack .step.ghost').length > 0`, 90000), 'no ghost steps');
+  const ghosts = await ev(`document.querySelectorAll('.rack .step.ghost').length`);
+  await clickSel('#sg-keep'); await sleep(700);
+  const pid = await ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui.pattern`), s = await saved();
+  const late = s.tracks.filter(t => t.kind === 'drum').flatMap(t => t[pid] ?? []).filter(n => n.t / 24 > 6).length;
+  assert(late > 0, 'nothing was added after step 7');
+  return `${ghosts} ghost steps, ${late} hits kept after the ones placed`;
+});
+await test('brain chat: a request shows what changed, A/B flips before and after, Undo takes it back', async () => {
+  await ev(`document.querySelector('#plugin').hidden = true; document.querySelector('#dlg').open && document.querySelector('#dlg').close(); 1`);
+  assert(await until(`!document.querySelector('#make').disabled`, 120000), 'busy');
+  const bpm0 = (await saved()).bpm, hat0 = !!track(await saved(), 'hat').mute;
+  await key('i', 2); await sleep(500);
+  assert(await ev(`!document.querySelector('#chat').hidden`), 'Ctrl+I did not open the chat');
+  await clickSel('#chat-in'); await type('tempo 141 and mute the hats'); await key('Enter');
+  assert(await until(`[...document.querySelectorAll('#chat .msg.brain .diff li')].some(li => /Tempo .* 141 BPM/.test(li.textContent))`, 30000), `no diff: ${await ev(`document.querySelector('#chat-log').textContent.slice(-300)`)}`);
+  const diff = await ev(`[...document.querySelectorAll('#chat .msg.brain')].at(-1).querySelector('.diff').textContent`);
+  assert(/Hats: muted/.test(diff), diff);
+  const ab = `[...[...document.querySelectorAll('#chat .msg.brain')].at(-1).querySelectorAll('.review button')].find(b => b.textContent === 'A/B' || b.textContent.startsWith('Hearing'))`;
+  await clickSel(ab); await sleep(600);
+  assert((await saved()).bpm === bpm0, 'A/B did not go back to before');
+  await clickSel(ab); await sleep(600);
+  assert((await saved()).bpm === 141, 'A/B did not come back to after');
+  await clickSel(`[...[...document.querySelectorAll('#chat .msg.brain')].at(-1).querySelectorAll('.review button')].find(b => b.textContent === 'Undo')`); await sleep(600);
+  const s = await saved();
+  assert(s.bpm === bpm0 && !!track(s, 'hat').mute === hat0, `undo: ${s.bpm}`);
+  return diff.replace(/\s+/g, ' ').slice(0, 120);
+});
+await test('brain chat: questions get answers, and a selection changes only those notes', async () => {
+  if (await ev(`document.querySelector('#chat').hidden`)) { await key('i', 2); await sleep(500); }
+  await clickSel('#chat-in'); await type('what key is this in?'); await key('Enter'); await sleep(600);
+  const answer = await ev(`[...document.querySelectorAll('#chat .msg.brain')].at(-1).textContent`);
+  const s0 = await saved();
+  assert(answer.includes(`${['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][s0.root]} ${s0.mode}`), answer);
+  await clickSel('#chat-close'); await sleep(300);
+  await key('F7'); await sleep(500);
+  await clickSel(`[...document.querySelectorAll('#dock-tools .picker')].find(p => p.title === 'Channel')`); await menuPick('Melody'); await sleep(400);
+  const pid = await ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui.pattern`);
+  if (!(track(await saved(), 'melody')[pid] ?? []).length) { const c = await box('.proll canvas'); for (const dx of [20, 80, 140]) { await click(c.l + dx, c.t + 300 + dx / 4); await sleep(250); } }  // an empty pattern: write a few notes to select
+  const before = (track(await saved(), 'melody')[pid] ?? []).map(n => n.p);
+  await key('a', 2); await sleep(300);  // F7 already put the focus on the roll; a click would draw a note
+  await key('i', 2); await sleep(400);
+  const ctxChip = await ev(`document.querySelector('#chat-ctx').textContent`);
+  await clickSel('#chat-in'); await type('up an octave'); await key('Enter'); await sleep(700);
+  const after = (track(await saved(), 'melody')[pid] ?? []).map(n => n.p);
+  const was = new Set(before.map(p => p + 12));  // the studio re-sorts notes and merges ones that overlap at the same pitch
+  assert(before.length && after.length && after.length <= before.length && after.every(p => was.has(p)), `before ${before.length}: ${before.join(',')} | after ${after.length}: ${after.join(',')}`);
+  await clickSel('#chat-close'); await sleep(300);
+  return `${answer.slice(0, 60)}; ${ctxChip.match(/\d+ selected[^·]*/)?.[0] ?? ''} moved up an octave`;
+});
+await test('agent: a loop becomes a full song in one request, and one Undo takes it back', async () => {
+  await ev(`document.querySelector('#plugin').hidden = true; document.querySelector('#dlg').open && document.querySelector('#dlg').close(); 1`);
+  assert(await until(`!document.querySelector('#make').disabled`, 120000), 'busy');
+  const s0 = await saved(), pats0 = s0.patterns.length;
+  if (await ev(`document.querySelector('#chat').hidden`)) { await key('i', 2); await sleep(500); }
+  await clickSel('#chat-in'); await type('turn this loop into a full song'); await key('Enter');
+  assert(await until(`[...document.querySelectorAll('#chat .msg.brain .diff li')].some(li => /New patterns: Intro, Verse, Bridge, Outro/.test(li.textContent))`, 240000), `no song: ${await ev(`document.querySelector('#chat-log').textContent.slice(-400)`)}`);
+  const s = await saved(), clips = s.playlist.clips.filter(c => c.type === 'pattern');
+  assert(clips.length === 7 && s.markers.map(m => m.name).join() === 'Intro,Verse,Hook,Verse 2,Bridge,Hook,Outro', `${clips.length} clips, markers ${s.markers.map(m => m.name)}`);
+  const verse = s.patterns.find(p => p.name === 'Verse').id;
+  assert(!(track(s, 'melody')[verse] ?? []).length && (track(s, 'kick')[verse] ?? []).length, 'the verse should keep drums and leave the melody out');
+  const diff = await ev(`[...document.querySelectorAll('#chat .msg.brain')].at(-1).querySelector('.diff').textContent`);
+  await clickSel(`[...[...document.querySelectorAll('#chat .msg.brain')].at(-1).querySelectorAll('.review button')].find(b => b.textContent === 'Undo')`); await sleep(800);
+  assert((await saved()).patterns.length === pats0, 'Undo left the new patterns');
+  await clickSel('#chat-close'); await sleep(300);
+  return diff.replace(/\s+/g, ' ').slice(0, 160);
+});
 // On a phone: Chrome emulates a 390 x 844 touch phone, then goes back to the desktop for the tests after
 const asPhone = async on => {
   await send('Emulation.setDeviceMetricsOverride', on ? { width: 390, height: 844, deviceScaleFactor: 2, mobile: true } : { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
