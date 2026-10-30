@@ -92,8 +92,8 @@ export const aiReady = name => !!models[name];
 // It never touches the studio itself. It only rewrites a request the rules didn't understand into the
 // plain commands they do, so it can't do anything the brain couldn't already do, and you see the result.
 const WEBLLM = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.86/+esm';
-// Both Apache-2.0 and run on the graphics card (WebGPU). Best understands far more but needs about 5 GB of graphics memory.
-export const SMART_MODELS = { fast: { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', size: 'about 1 GB' }, best: { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', size: 'about 5 GB' } };
+// Both run on the graphics card (WebGPU). Fast needs under 2 GB of graphics memory, Best about 2.3 GB, so a 4 GB card holds either.
+export const SMART_MODELS = { fast: { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', size: 'about 1 GB' }, best: { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', size: 'about 2 GB' } };
 let llm = null, llmKind = null;
 export const smartAvailable = () => typeof navigator !== 'undefined' && !!navigator.gpu;
 function smartEngine(kind, status) {
@@ -114,6 +114,8 @@ make the <part> <darker|brighter|warmer|grittier|wider|narrower> | more reverb o
 add <reverb|delay|drive|tape|chorus|phaser|flanger|bitcrush|compressor|limiter|gate|auto-pan|vocoder|stereo width|parametric eq> to the <part> | remove <effect> from the <part>
 make the <part> a <piano|electric piano|organ|pad|strings|guitar|sitar|pluck|bell|flute|synth|brass|reese bass|acid bass> | duck the <part> under the kick
 half-time the <part> | stutter the <part> | tape stop at the end | autotune the vocals | make the drums hit harder | make it sound old
+use a <1 6 4 5> progression | make the chords jazzier | add a counter melody | layer the snare with a clap | add an open hat on the offbeat | add a shaker | make the 808 follow the kick
+put a pause before the hook | drums come in at bar <n> | add a riser before the hook | make the hook bigger | make a <n> bar loop | make the second bar different | write a melody that goes up at the end
 balance the mix | check my mix | turn this into a full song | hum a melody | export an mp3 | play | stop
 Parts: kick, snare, hats, open hat, perc, 808, chords, arp, melody, drums, vocals, mix.
 Leave out anything these commands can't do.`;
@@ -135,6 +137,40 @@ export async function smartRewrite(text, status, kind = 'fast') {
   status?.('The smart brain is thinking…');
   const r = await engine.chat.completions.create({ messages: [{ role: 'system', content: GUIDE }, ...EXAMPLES, { role: 'user', content: text }], temperature: 0.2, max_tokens: 160 });
   return { text: r.choices[0]?.message?.content ?? '', kind };
+}
+
+// ---------- a connected AI: a large model on a free service, with a key you made yourself ----------
+// The browser talks to the service directly; there's no BeatLab server in between. What goes: your words, the
+// recent chat and a text summary of the project. Your audio and files never leave the computer.
+const SERVICES = [
+  { test: /^gsk_/, name: 'Groq', base: 'https://api.groq.com/openai/v1', fallback: 'llama-3.3-70b-versatile', prefer: ids => ids.find(i => i === 'llama-3.3-70b-versatile') ?? ids.find(i => /gpt-oss-120b/.test(i)) ?? ids.find(i => /llama.*versatile|llama-4/.test(i)) },
+  { test: /^AIza/, name: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', fallback: 'gemini-2.5-flash', prefer: ids => ids.filter(i => /^gemini-\d[\d.]*-flash$/.test(i)).sort((a, b) => parseFloat(b.slice(7)) - parseFloat(a.slice(7)))[0] },
+];
+export const serviceOf = key => SERVICES.find(s => s.test.test((key ?? '').trim())) ?? null;
+const modelFor = new Map();
+async function modelId(s, key) {
+  if (!modelFor.has(s.name)) {
+    let id = null;
+    try {
+      const r = await fetch(`${s.base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+      if (r.ok) id = s.prefer((await r.json()).data.map(m => m.id.replace(/^models\//, '')));
+    } catch { /* the fallback below still works */ }
+    modelFor.set(s.name, id ?? s.fallback);
+  }
+  return modelFor.get(s.name);
+}
+export async function askCloud(messages, key, status) {
+  const s = serviceOf(key);
+  if (!s) throw new Error('that key doesn\'t look like a Groq or Google one');
+  status?.(`Asking ${s.name}…`);
+  const r = await fetch(`${s.base}/chat/completions`, {
+    method: 'POST', headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: await modelId(s, key.trim()), messages, temperature: 0.5, max_tokens: 2500, response_format: { type: 'json_object' } }),
+  });
+  if (r.status === 401 || r.status === 403) throw new Error(`${s.name} refused the key. Check it in Connect a free AI`);
+  if (r.status === 429) throw new Error(`${s.name}'s free limit is used up for now. Try again in a minute`);
+  if (!r.ok) throw new Error(`${s.name} answered with error ${r.status}`);
+  return (await r.json()).choices?.[0]?.message?.content ?? '';
 }
 
 // ---------- MusicVAE: variations and a drummer's feel, two bars at a time ----------

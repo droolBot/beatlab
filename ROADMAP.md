@@ -115,7 +115,12 @@
    **A brain that understands producers (2026-10-29):** measured on requests typed the way producers type
    them (brain_eval.mjs, now part of `npm test`), it went from 63% to 100% of 190: complaints ("808 not
    hitting"), moods, sound swaps, sidechain, slang and typos. When it doesn't get something, it offers the
-   closest things it can do. The smart brain has a Best size (Qwen2.5 7B) for strong graphics cards, which
-   falls back to the fast one by itself. Not yet tried on a PC with WebGPU.
+   closest things it can do.
+   **A brain that can actually do things (2026-10-30):** that 100% was on requests it had been taught. On new
+   ones written afterwards, the rules alone had no answer for 15 of 30, so rules can't be the whole answer.
+   Now: connect a free AI (Groq or Google, your own key, no server) that reads the project and writes parts;
+   conversation memory; real musical edits in edit.js; answers from the project in advice.js; piano roll
+   Tools and ghosts; melodies with contours and phrase endings, drum turnarounds, new beats start mixed.
+   Still to prove: a real model's musical results by ear, and the on-PC model on real hardware.
 5. **Depth:** every synth voice on the audio thread for lower CPU, sends between inserts, ghost channels,
    collaboration from a shared link, a brain that learns from your past beats, and more of FL's long tail.

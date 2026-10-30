@@ -1,0 +1,16 @@
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	root * /srv
+	encode gzip
+	header X-Content-Type-Options nosniff
+	# Pages change with each update, so browsers check before reusing them. Big media can stay cached for a day.
+	@media path *.glb *.webp *.mp4 *.webm *.wav *.ogg *.woff2
+	@pages not path *.glb *.webp *.mp4 *.webm *.wav *.ogg *.woff2
+	header @media Cache-Control "public, max-age=86400"
+	header @pages Cache-Control "no-cache"
+	file_server
+}

@@ -228,8 +228,12 @@ await test('piano roll: draw, select all, delete, undo', async () => {
 await test('piano roll: chord stamp, scale snap, quantize, copy-paste, legato, velocity lane', async () => {
   await clickSel(`[...document.querySelectorAll('#dock-tools .picker')].find(p => p.title.startsWith('Chord stamp'))`); await menuPick('Minor 7'); await sleep(300);
   const n0 = (await notesOf('melody')).length, cv = await box('.proll canvas'), vis = await box('.roll-scroll');
-  await click(cv.l + cv.w * 0.9 + 3, vis.t + vis.h * 0.6);
-  const n1 = (await notesOf('melody')).length;
+  let n1 = n0;
+  for (const y of [0.6, 0.45, 0.75, 0.3, 0.85]) {  // the melody is different every time, so find a spot with no note in it
+    await click(cv.l + cv.w * 0.9 + 3, vis.t + vis.h * y);
+    n1 = (await notesOf('melody')).length;
+    if (n1 > n0) break;
+  }
   assert(n1 - n0 >= 3, `chord added ${n1 - n0}`);
   await key('q', 2); await key('c', 2); await key('v', 2); await key('l', 2); await sleep(300);
   const vel = await box('.vel canvas');
@@ -675,7 +679,7 @@ await test('brain: one sentence, several changes, one undo', async () => {
   await until(`!document.querySelector('#make').disabled`);
   const s0 = await saved(), chords0 = track(s0, 'chords').fx.length;
   const top = await tell('tempo 150, mute the hats and make the chords darker');
-  assert(await until(`/3 of 3 done/.test([...document.querySelectorAll('.toast')].map(t => t.textContent).join(' '))`, 15000), `toast; palette offered "${top}"`);
+  assert(await until(`/3 of 3 done/.test([...document.querySelectorAll('.toast')].map(t => t.textContent).join(' '))`, 15000), `toast; palette offered "${top}"; toast now: ${await ev(`[...document.querySelectorAll('.toast')].map(t => t.textContent).join(' ')`)}`);
   const s1 = await saved();
   assert(s1.bpm === 150 && track(s1, 'hat').mute === true && track(s1, 'chords').fx.some(f => f.type === 'filter' && !(f.hp > 0.5)), 'all three applied');
   await key('z', 2); await sleep(600);
@@ -1015,6 +1019,105 @@ await test('phone: menus slide up from the bottom', async () => {
 });
 await asPhone(false);
 
+const chatSay = async text => {
+  if (await ev(`document.querySelector('#chat').hidden`)) { await key('i', 2); await sleep(400); }
+  const n = await ev(`document.querySelectorAll('#chat .msg.brain').length`);
+  await clickSel('#chat-in'); await type(text); await key('Enter');
+  for (let k = 0; k < 400; k++) { await sleep(150); if (await ev(`document.querySelectorAll('#chat .msg.brain').length > ${n}`)) break; }  // a new beat can take a while to balance
+  await sleep(400);
+  return ev(`[...document.querySelectorAll('#chat .msg.brain')].at(-1).textContent`);
+};
+await test('brain: it remembers. More, too much, same for the hats, undo that', async () => {
+  const vol = async id => track(await saved(), id).vol;
+  await chatSay('make a trap beat'); await sleep(800);
+  const a = await vol('snare');
+  await chatSay('turn the snare down 2 db'); const b = await vol('snare');
+  assert(b < a, 'the snare went down');
+  await chatSay('more'); const c = await vol('snare');
+  assert(c < b, `"more" went further: ${b} to ${c}`);
+  await chatSay('too much'); const d = await vol('snare');
+  assert(Math.abs(d - b) < 0.01, `"too much" came back: ${b} vs ${d}`);
+  const h = await vol('hat');
+  await chatSay('same for the hats'); const h2 = await vol('hat');
+  assert(h2 > h, `the hats got the last move: ${h} to ${h2}`);
+  await chatSay('undo that'); const h3 = await vol('hat');
+  assert(Math.abs(h3 - h) < 0.01, `"undo that" took it back: ${h} vs ${h3}`);
+  return 'follow-ups act on the last change';
+});
+await test('brain: real musical requests change the notes', async () => {
+  const hook = s => s.patterns.find(p => p.name === 'Hook').id;
+  let s = await saved(); const n = s.tracks.length;
+  let said = await chatSay('use a 1 6 4 5 progression');
+  s = await saved();
+  assert(s.prog?.length === 4, `progression: ${said}`);
+  await chatSay('layer the snare with a clap'); s = await saved();
+  assert(s.tracks.some(t => t.layerOf === 'snare'), 'a layer channel');
+  await chatSay('add a counter melody'); s = await saved();
+  assert(s.tracks.some(t => t.name === 'Counter melody' && (t[hook(s)] ?? []).length), 'a counter melody with notes');
+  await chatSay('add strings'); s = await saved();
+  assert(s.tracks.some(t => t.sound === 'strings' && t.user), 'a strings channel');
+  await chatSay('put a pause before the hook'); s = await saved();
+  const verse = s.patterns.find(p => p.name === 'Verse'), bars = verse.bars;
+  assert(track(s, 'kick')[verse.id].every(x => x.t + x.d <= (bars * 4 - 2) * 96), 'the kick stops before the hook');
+  assert(s.tracks.length > n);
+  const dur = s.patterns.find(p => p.name === 'Hook').bars;
+  await chatSay('double the hook'); s = await saved();
+  assert(s.patterns.find(p => p.name === 'Hook').bars === dur * 2, 'the hook doubled');
+  const ask = await chatSay('whats a good bpm for drill');
+  assert(/138/.test(ask), `a real answer: ${ask}`);
+  const lost = await chatSay('flibber the wobbulator');
+  assert(/Closest things/.test(lost) && /Connect a free AI/.test(lost), `it offers a way forward: ${lost}`);
+  return 'progression, layer, counter melody, strings, gap, length, answer';
+});
+await test('brain: a connected AI reads the project, writes notes, and bad steps are thrown out', async () => {
+  await ev(`(() => {
+    localStorage.setItem('beatlab:aikey', 'gsk_fake_test_value');
+    window.__fetch = window.fetch; window.__sent = [];
+    window.fetch = async (u, o) => {
+      if (!String(u).includes('api.groq.com')) return window.__fetch(u, o);
+      if (String(u).endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'llama-3.3-70b-versatile' }] }));
+      window.__sent.push(JSON.parse(o.body));
+      const steps = [{ type: 'notes', part: 'melody', notes: [{ bar: 1, beat: 1, len: 1, pitch: 69 }, { bar: 1, beat: 3, len: 2, pitch: 72 }] }, { type: 'drums', part: 'kick', bars: ['x...x...x...x...'] }, { type: 'teleport' }];
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ say: 'Wrote you a line.', steps, ideas: ['add a counter melody'] }) } }] }));
+    };
+    return 0;
+  })()`);
+  const said = await chatSay('write something sad over these chords');
+  const s = await saved(), pid = await ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui.pattern`);
+  assert(/Wrote you a line/.test(said) && /teleport/.test(said), said);
+  assert(track(s, 'melody')[pid].length === 2, 'the two notes were written');
+  assert(track(s, 'kick')[pid].filter(n => n.t < 1536).length >= 4, 'four on the floor');
+  const sent = await ev(`window.__sent[0]`);
+  assert(sent.model === 'llama-3.3-70b-versatile' && /The project right now/.test(sent.messages[0].content) && /Channels:/.test(sent.messages[0].content), 'it was told about the project');
+  assert(!JSON.stringify(s).includes('gsk_'), 'the key is not in the song');
+  await ev(`(() => { window.fetch = async (u, o) => (String(u).includes('api.groq.com') ? new Response('{}', { status: 429 }) : window.__fetch(u, o)); return 0; })()`);
+  const fell = await chatSay('make the snare louder');
+  assert(/free limit/.test(fell) && /Turn up/.test(fell), `falls back: ${fell}`);
+  await ev(`(() => { window.fetch = window.__fetch; localStorage.removeItem('beatlab:aikey'); return 0; })()`);
+  await clickSel('#chat-close'); await sleep(300);
+  return 'notes and drums written, a bad step dropped, and a dead service falls back';
+});
+await test('piano roll: Tools menu and ghost notes', async () => {
+  await key('F7'); await sleep(500);
+  await clickSel(`[...document.querySelectorAll('#dock-tools .picker')].find(p => p.title === 'Channel')`); await menuPick('Chords'); await sleep(400);
+  const pid = await ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui.pattern`);
+  const before = track(await saved(), 'chords')[pid].length;
+  assert(before > 2, 'chords to work on');
+  await clickSel('#roll-tools-menu'); await sleep(200); await menuPick('Arpeggiate'); await sleep(500);
+  const after = track(await saved(), 'chords')[pid];
+  assert(new Set(after.map(n => n.t)).size > new Set([]).size + 2, 'notes now fall at different times');
+  await key('z', 2); await sleep(400);
+  await clickSel('#roll-tools-menu'); await sleep(200); await menuPick('Strum'); await sleep(500);
+  const st = track(await saved(), 'chords')[pid].slice(0, 3).map(n => n.t);
+  await clickSel(`[...document.querySelectorAll('#dock-tools button')].find(b => b.textContent === 'Ghosts')`); await sleep(400);
+  assert(await ev(`[...document.querySelectorAll('#dock-tools button')].find(b => b.textContent === 'Ghosts').getAttribute('aria-pressed') === 'true'`), 'ghosts on');
+  await clickSel(`[...document.querySelectorAll('#dock-tools button')].find(b => b.textContent === 'Ghosts')`); await sleep(300);
+  return `${before} chord notes arpeggiated to ${after.length}; strummed starts ${st.join(', ')}`;
+});
+await test('a new beat starts mixed: 808 ducked, chords wide, no doctor complaints about either', async () => {
+  const s = await saved();
+  return `duck ${track(s, 'bass').duck}, chord fx ${track(s, 'chords').fx.map(f => f.type).join(' ')}`;
+});
 await test('help and white studio', async () => {
   await key('F1'); await sleep(300);
   assert(await ev(`document.querySelectorAll('#dlg .help-grid div').length > 30`), 'help');

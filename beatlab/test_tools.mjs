@@ -1,7 +1,7 @@
 // Run: node beatlab/test_tools.mjs
 import assert from 'node:assert/strict';
 import { STEP } from './music.js';
-import { quantize, humanize, euclid, shiftSteps, snapToScale, inBox, tidy, valueAt, AUTO, CHORDS } from './tools.js';
+import { quantize, humanize, euclid, shiftSteps, snapToScale, inBox, tidy, valueAt, AUTO, CHORDS, strum, flam, arpeggiate, chop, reverseNotes, ramp } from './tools.js';
 
 const n = (t, p = 60, d = 12, v = 100) => ({ t, d, p, v });
 assert.deepEqual(quantize([n(5), n(20)], STEP).map(x => x.t), [0, 24]);
@@ -29,4 +29,21 @@ assert.equal(valueAt([], 10, 0.8), 0.8);
 assert.equal(AUTO.vol.toParam(0.8), 1);
 assert(Math.abs(AUTO.cut.toParam(1) - 20000) < 1e-6);
 assert.deepEqual(CHORDS.min7.iv, [0, 3, 7, 10]);
+{ // the piano roll's Tools menu
+  const chord = [{ t: 0, d: 96, p: 64, v: 90 }, { t: 0, d: 96, p: 60, v: 90 }, { t: 0, d: 96, p: 67, v: 90 }];
+  assert.deepEqual(strum(chord, 6).map(n => n.t), [6, 0, 12], 'low to high');
+  assert.equal(chord[0].t, 0, 'the originals stay as they were');
+  const f = flam([{ t: 48, d: 24, p: 60, v: 100 }]);
+  assert.equal(f.length, 2);
+  assert(f[0].t < 48 && f[0].v < 100);
+  const a = arpeggiate(chord, 24);
+  assert.deepEqual(a.map(n => n.p), [60, 64, 67, 64]);
+  assert.deepEqual(a.map(n => n.t), [0, 24, 48, 72]);
+  const c = chop([{ t: 0, d: 96, p: 60, v: 90 }], 24);
+  assert.equal(c.length, 4);
+  assert.equal(c.at(-1).t + c.at(-1).d, 96);
+  assert.deepEqual(reverseNotes([{ t: 0, d: 24, p: 60, v: 90 }, { t: 48, d: 48, p: 62, v: 90 }]).map(n => n.t), [72, 0]);
+  const r = ramp([{ t: 0, d: 24, p: 60, v: 90 }, { t: 96, d: 24, p: 60, v: 90 }]);
+  assert(r[0].v < r[1].v);
+}
 console.log('tools ok');

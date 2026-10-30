@@ -1,7 +1,7 @@
 // BeatLab studio: an FL Studio-style workstation around the music engine, the sound engine, the AI
 // brain and the 3D deck. Every edit is undoable and autosaved into the open project.
 import {
-  STYLES, NOTES, SOUNDS, SOUNDS_FOR, SECTION_NAMES, PPQ, STEP, BAR, generate, regenerate, refresh, changeMode, transpose,
+  STYLES, NOTES, SOUNDS, SOUNDS_FOR, SECTION_NAMES, PPQ, STEP, BAR, generate, regenerate, refresh, changeMode, setProgression, richerChords, transpose,
   arrange, suggestStyles, noteName, songScale, trackName, notesFor, pickKit, COLORS, newTrack, songLength, patternOf, newPatternId, clipId, upgrade, PATTERN_COLORS, ROWS, SOUND_INFO,
 } from './music.js';
 import { Engine, Player, PARAMS, EFFECTS, DELAY_TIMES, GATE_TIMES, PAN_TIMES, VOCODER_BANDS, paramsOf, render, LANES } from './sound.js';
@@ -10,9 +10,11 @@ import { humToNotes } from './hum.js';
 import { diagnose } from './doctor.js';
 import { PRESETS, STYLE_SOUNDS, flInstruments, flKits, kitRoles, buildZones, drumZone, spread, unwrapOgg, isAudio } from './instruments.js';
 import { decode, analyze, groove } from './listen.js';
-import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable, aiContinueLine, aiContinueDrums, SMART_MODELS } from './brain.js';
-import { plan, describe, fromModel, closest } from './intent.js';
-import { quantize, humanize, euclid, snapToScale, inBox, tidy, AUTO, CHORDS, clock } from './tools.js';
+import { aiMelody, aiDrums, aiHumanize, aiVariations, aiFill, smartRewrite, smartAvailable, aiContinueLine, aiContinueDrums, SMART_MODELS, askCloud, serviceOf } from './brain.js';
+import { plan, describe, fromModel, closest, parseReply, STEP_GUIDE } from './intent.js';
+import { dropout, bringIn, addDrum, layer, bassFollowKick, counterMelody, riser, setLength, varyBar, shapeLine, lift, writeNotes, writeSteps, patternBefore, addSound, thin } from './edit.js';
+import { advise } from './advice.js';
+import { quantize, humanize, euclid, snapToScale, inBox, tidy, AUTO, CHORDS, clock, strum, flam, arpeggiate, chop, reverseNotes, ramp } from './tools.js';
 import { lufsOf, finish, encodeWav, encodeMp3, limitInPlace, peakOf, db, midiFile, zipFiles } from './deliver.js';
 import { projects, putAudio, getAudio, delAudio, audioIds, newId } from './store.js';
 import { openInput, capture, inputLatency, setMonitor, inputName, connectMidi, typingNote, GM_DRUMS } from './record.js';
@@ -755,11 +757,12 @@ async function mixDoctor(before = null) {
 }
 
 // ---------- the brain: what you type becomes steps, done as one undo ----------
+let lastSteps = null;  // what the brain just did, so "more", "less" and "same for the snare" have something to work on
 const brainCtx = () => ({
   tracks: song.tracks.map(t => ({ id: t.id, name: trackName(t), kind: t.kind })),
   styles: STYLE_IDS.map(id => ({ id, name: STYLES[id].name })),
   effects: Object.entries(EFFECTS).map(([id, f]) => ({ id, name: f.name })),
-  instruments: flInst.map(i => i.name), kits: flKit.map(k => k.name),
+  instruments: flInst.map(i => i.name), kits: flKit.map(k => k.name), last: lastSteps,
 });
 const brainNames = () => ({ ...Object.fromEntries(song.tracks.map(t => [t.id, trackName(t)])), drums: 'the drums', mix: 'the mix', vocals: 'the vocals', ...Object.fromEntries(STYLE_IDS.map(id => [id, STYLES[id].name])), ...Object.fromEntries(Object.entries(EFFECTS).map(([id, f]) => [id, f.name])) });
 const NEEDS_PARTS = ['mute', 'solo', 'pan', 'unfx', 'instrument'];
@@ -861,6 +864,33 @@ async function runStep(st) {
     case 'solo': ts.forEach(t => { t.solo = st.on; }); return mixChanged();
     case 'pan': ts.forEach(t => { t.pan = st.value; }); return mixChanged();
     case 'duck': ts.filter(t => t.id !== 'kick').forEach(t => { t.duck = st.value; }); return mixChanged();
+    case 'say': return null;
+    case 'ask': { const a = answerQuestion(st.text); chatLog().push({ who: 'you', text: st.text }, { who: 'brain', text: a?.text ?? 'I don\'t have an answer for that one yet.', ideas: a?.ideas ?? closest(st.text), lost: !a }); openChat(); return null; }
+    case 'undo': commit(songJSON()); stepHistory(-1); return null;
+    case 'dropout': return dropout(ts, st.before ? patternBefore(song, st.before) ?? pid : pid, song, st.beats);
+    case 'bringIn': { const who = st.except ? song.tracks.filter(t => !partTracks(st.except).includes(t) && t.kind !== 'audio' && t.kind !== 'bus') : ts; const note = bringIn(who, pid, song, st.bar); changed(); return note; }
+    case 'muteExcept': { const keep = partTracks(st.except); song.tracks.filter(t => !keep.includes(t) && t.kind !== 'bus').forEach(t => { t.mute = true; }); keep.forEach(t => { t.mute = false; }); return mixChanged(); }
+    case 'thin': thin(ts, pid); return changed();
+    case 'tighten': ts.forEach(t => { if (t[pid]) t[pid] = tidy(quantize(t[pid], STEP)); }); return changed();
+    case 'addSound': {
+      const t = addSound(song, st.sound, st.section ? pid : null), inst = flInst.find(i => i.name.toLowerCase().includes(st.sound));  // FL's own instrument when there is one
+      if (!t) return 'there is nothing for it to play yet';
+      if (inst) { try { await loadInstrument(t, inst); } catch { /* it keeps the synth */ } }
+      return changed();
+    }
+    case 'progression': song = setProgression(song, st); return changed();
+    case 'chordFlavor': song = richerChords(song, st.delta); return changed();
+    case 'counter': { const lead = track('melody') ?? song.tracks.find(t => t.kind === 'melody'); if (!lead) return 'there is no melody to answer yet'; counterMelody(song, lead, st.sound ?? 'pluck'); return changed(); }
+    case 'layer': { if (!ts[0]) return 'there is nothing to layer'; layer(song, ts[0], st.sound); return changed(); }
+    case 'addDrum': addDrum(song, { sound: st.sound, rhythm: st.rhythm, steps: st.steps, pid: st.section ? pid : null }); return changed();
+    case 'bassFollow': { const b = song.tracks.find(t => t.kind === 'bass'), k = track('kick'); if (!b || !k) return 'it needs both a kick and a bass channel'; bassFollowKick(song, b, k); return changed(); }
+    case 'riser': riser(song, track('fx'), patternBefore(song, st.before ?? 'hook') ?? pid); return changed();
+    case 'length': { setLength(song, pid, st.bars ?? barsOf(pid) * st.times); return changed(); }
+    case 'lift': { const note = lift(song, st.section ? pid : hookId(song)); changed(); return note; }
+    case 'varyBar': if (!varyBar(song, ts, pid, st.bar < 0 ? barsOf(pid) : st.bar)) return 'nothing plays in that bar'; return changed();
+    case 'shape': ts.forEach(t => shapeLine(song, t, pid, st.shape)); return changed();
+    case 'notes': { const t = partTracks([st.part])[0] ?? track('melody'); if (!t || !writeNotes(song, t, pid, st.notes)) return 'none of those notes could be used'; ui.selected = t.id; return changed(); }
+    case 'drums': { const t = partTracks([st.part])[0]; if (!t) return `there is no ${st.part} channel`; writeSteps(song, t, pid, st.bars); return changed(); }
     case 'vol': ts.forEach(t => { t.vol = clamp(t.vol * 10 ** (st.dB / 20), 0, 1.2); }); return mixChanged();
     case 'fx': ts.forEach(t => addFx(t, { type: st.fx, ...st.set })); return mixChanged();
     case 'unfx': ts.forEach(t => { t.fx = t.fx.filter(f => (st.fx ? f.type !== st.fx : f.auto)); }); return mixChanged();
@@ -872,16 +902,27 @@ async function runStep(st) {
     default: return null;
   }
 }
-async function runBrain(text, { quiet = false } = {}) {
+async function runBrain(text, { quiet = false, aiFirst = false } = {}) {
   if (busy) return hint('The brain is still busy with the last request. Try again in a moment.');
-  let steps = brainPlan(text);
+  let steps = aiFirst && aiKey() ? [] : brainPlan(text), say = '', ideas = [];
   const names = brainNames(), said = [];
   busy = true;
   batching = true;
   document.querySelectorAll('#make, #new-part').forEach(b => { b.disabled = true; });
   try {
     const unknown = steps.filter(x => x.type === 'unknown');
-    if (ui.smart && unknown.length) {  // the smart brain rewrites what the rules didn't get into commands they do
+    if (aiKey() && (aiFirst || unknown.length)) {  // a connected AI reads the whole request, knowing the project and the chat
+      try {
+        const r = parseReply(await askCloud(aiMessages(text), aiKey(), aiStatus), brainCtx());
+        ({ say, ideas } = r);
+        steps = r.steps;
+        if (r.dropped.length) said.push(`✗ skipped what BeatLab can't do yet: ${[...new Set(r.dropped)].join(', ')}`);
+      } catch (e) {
+        said.push(`✗ the AI didn't answer: ${e.message}. The built-in brain took it.`);
+        steps = brainPlan(text);
+      }
+    }
+    else if (ui.smart && unknown.length) {  // the smart brain rewrites what the rules didn't get into commands they do
       const ask = unknown.map(x => x.text).join('. ');
       try {
         const out = await smartRewrite(ask, aiStatus, ui.smartSize ?? 'fast');
@@ -897,6 +938,8 @@ async function runBrain(text, { quiet = false } = {}) {
       const note = await runStep(st);
       said.push(`✓ ${describe(st, names)}${typeof note === 'string' ? ` (${note})` : ''}`);
     }
+    const real = steps.filter(x => !['say', 'ask', 'undo', 'unknown', 'play', 'stop', 'export', 'doctor', 'hum'].includes(x.type));
+    if (real.length) lastSteps = real;
   } catch (e) { said.push(`✗ stopped: ${e.message}`); }
   batching = false;
   busy = false;
@@ -907,7 +950,71 @@ async function runBrain(text, { quiet = false } = {}) {
   aiStatus(said.join('  ·  '));
   if (!quiet) toast(`${ok} of ${steps.length} done: ${said.join('; ')}.${ok ? ' Ctrl+Z undoes all of it.' : ''}`);
   renderChat();
-  return { said, ok };
+  return { said, ok, say, ideas, undone: steps.some(x => x.type === 'undo'), lost: said.some(x => x.startsWith("✗ Didn't")) };
+}
+// ---------- connecting a free AI ----------
+const AI_KEY = 'beatlab:aikey';  // on its own, so it's never inside a project file or the undo history
+function aiKey() { try { return localStorage.getItem(AI_KEY) ?? ''; } catch { return ''; } }
+const aiName = () => serviceOf(aiKey())?.name ?? null;
+// The project in words, for a model: what's in it, the chords, and the current pattern's notes
+function brainBrief() {
+  const p = pat(), bars = p?.bars ?? 8, dB = v => `${(20 * Math.log10(Math.max(1e-4, v))).toFixed(0)}dB`, beat = t => `${Math.floor(t / BAR) + 1}.${((t % BAR) / PPQ + 1).toFixed(2).replace(/\.?0+$/, '')}`;
+  const lines = [
+    `Style ${STYLES[song.style].name}, key ${NOTES[song.root]} ${song.mode}, ${song.bpm} BPM, swing ${Math.round((song.swing ?? 0) * 200)}%.`,
+    `Current pattern: ${p?.name} (${bars} bars). All patterns: ${song.patterns.map(x => `${x.name} (${x.bars ?? 8} bars)`).join(', ')}.`,
+    `Song order: ${song.playlist.clips.filter(c => c.type === 'pattern').sort((a, b) => a.t - b.t).map(c => patternOf(song, c.pattern)?.name).join(', ') || 'nothing on the playlist yet'}.`,
+    `Chords over 8 bars: ${[...new Map(song.harmony.map(c => [c.t, c])).values()].map(c => `bar ${c.t / BAR + 1} ${c.name}`).join(', ')}. Notes in the scale: ${songScale(song).map(x => NOTES[x]).join(' ')}.`,
+    'Channels:',
+    ...song.tracks.filter(t => t.kind !== 'bus').map(t => `- id "${t.id}", ${trackName(t)}, ${t.kind}, sound ${soundLabel(t)}, level ${dB(t.vol)}${t.mute ? ', muted' : ''}${t.pan ? `, pan ${t.pan}` : ''}${t.duck ? ', ducked under the kick' : ''}${t.fx.length ? `, effects ${t.fx.map(f => f.type).join(' ')}` : ''}, ${(t[ui.pattern] ?? []).length} notes here`),
+    `Effect ids: ${Object.keys(EFFECTS).join(', ')}.`,
+  ];
+  for (const t of song.tracks.filter(x => ['melody', 'chords', 'bass'].includes(x.kind))) {
+    const n = [...(t[ui.pattern] ?? [])].sort((a, b) => a.t - b.t).slice(0, 48);
+    if (n.length) lines.push(`${trackName(t)} notes now (bar.beat pitch beats): ${n.map(x => `${beat(x.t)} ${x.p} ${+(x.d / PPQ).toFixed(2)}`).join(', ')}`);
+  }
+  for (const t of song.tracks.filter(x => x.kind === 'drum')) {
+    const row = b => Array.from({ length: 16 }, (_, i) => ((t[ui.pattern] ?? []).some(n => Math.round(n.t / STEP) === b * 16 + i) ? 'x' : '.')).join('');
+    if ((t[ui.pattern] ?? []).length) lines.push(`${trackName(t)} steps, bars 1 and 2: ${row(0)} ${row(1)}`);
+  }
+  if (rollSel.size && showing('roll')) lines.push(`${rollSel.size} notes are selected in ${trackName(track(ui.selected))}.`);
+  return lines.join('\n');
+}
+function aiMessages(text) {
+  const system = `You are the brain inside BeatLab, a beat studio, working with a producer on their beat. Talk like a producer in the room: short and plain, no lists, no praise.
+Reply with one JSON object and nothing else: {"say": "what you did or your answer, one or two sentences", "steps": [{"type": "...", ...}], "ideas": ["up to 3 short next requests they could send"]}.
+Do what they ask with the steps below. Use several steps for a feeling or a vague request, and judge what suits this beat. "more", "less", "again" and "same for X" refer to the chat so far. When they ask for a specific melody, riff, bass line or rhythm, write it yourself with "notes" or "drums": real, musical parts in the key and on these chords, with space and repetition, not random notes. When they ask a question, answer in "say" with no steps unless they also asked for a change. If something truly can't be done, say so and give the closest thing you can do.
+${STEP_GUIDE}
+
+The project right now:
+${brainBrief()}`;
+  const recent = chatLog().filter(e => e.text || e.said?.length).slice(-9, -1).map(e => (e.who === 'you' ? { role: 'user', content: e.text } : { role: 'assistant', content: JSON.stringify({ say: e.text ?? '', did: (e.said ?? []).map(s => s.replace(/^[✓✗] /, '')) }) }));
+  return [{ role: 'system', content: system }, ...recent, { role: 'user', content: text }];
+}
+function aiDialog() {
+  const input = h('input', { type: 'password', class: 'field', placeholder: 'Paste your key here', 'aria-label': 'Your AI key', autocomplete: 'off', spellcheck: 'false', value: aiKey(), style: 'width:100%' });
+  const state = h('p', { class: 'note', role: 'status' }, aiName() ? `Connected to ${aiName()}.` : 'Not connected. The built-in brain is answering.');
+  const store = v => { try { if (v) localStorage.setItem(AI_KEY, v); else localStorage.removeItem(AI_KEY); } catch { /* private window */ } renderChat(); };
+  const save = async () => {
+    const key = input.value.trim();
+    if (!serviceOf(key)) { state.textContent = 'That doesn\'t look like a Groq key (starts with gsk_) or a Google key (starts with AIza).'; return; }
+    state.textContent = 'Checking the key…';
+    try {
+      await askCloud([{ role: 'user', content: 'Reply with this JSON: {"say":"ready"}' }], key);
+      store(key);
+      state.textContent = `Connected to ${serviceOf(key).name}. The chat now uses it.`;
+    } catch (e) { state.textContent = `It didn't work: ${e.message}.`; }
+  };
+  openDialog({ title: 'Connect a free AI', glyph: 'brain', body: [
+    h('p', {}, 'The built-in brain follows rules. A connected AI actually understands you: it holds a conversation, knows your project and writes melodies and drums itself. It\'s free, and you make the key yourself.'),
+    h('ol', { class: 'ai-steps' },
+      h('li', {}, 'Open ', h('a', { href: 'https://console.groq.com/keys', target: '_blank', rel: 'noopener' }, 'console.groq.com/keys'), ' and sign in with a free account.'),
+      h('li', {}, 'Press ', h('b', {}, 'Create API Key'), ' and copy it.'),
+      h('li', {}, 'Paste it below and press ', h('b', {}, 'Connect'), '.')),
+    input,
+    h('div', { class: 'btnrow', style: 'display:flex;gap:8px;margin:10px 0' }, h('button', { class: 'key primary btn', onclick: save }, 'Connect'), h('button', { class: 'btn', onclick: () => { input.value = ''; store(''); state.textContent = 'Disconnected. The built-in brain is answering.'; } }, 'Disconnect')),
+    state,
+    h('p', { class: 'note' }, 'A Google Gemini key from aistudio.google.com/apikey works here too. What gets sent to the service: your words, the recent chat and a text summary of the project (channels, chords, notes). Your audio and your files stay on this computer. The key is kept in this browser only. Free plans have limits, and a service may keep what it\'s sent, so read its terms if that matters to you.'),
+  ] });
 }
 function toggleSmart() {
   if (!ui.smart && !smartAvailable()) return toast("The smart brain needs WebGPU, which this browser doesn't have. Chrome or Edge on a PC with a graphics card can run it.");
@@ -920,7 +1027,7 @@ function toggleSmartSize() {
   ui.smartSize = ui.smartSize === 'best' ? 'fast' : 'best';
   ui.smart = true;
   save();
-  toast(ui.smartSize === 'best' ? 'Best smart brain on: Qwen 2.5 7B, about 5 GB the first time. It needs a graphics card with about 6 GB of memory; if yours can’t hold it, BeatLab switches back to the fast one by itself.' : 'Fast smart brain on: Qwen 2.5 1.5B, about 1 GB.');
+  toast(ui.smartSize === 'best' ? 'Best smart brain on: Llama 3.2 3B, about 2 GB the first time. It fits a graphics card with 4 GB of memory; if yours can’t hold it, BeatLab switches back to the fast one by itself.' : 'Fast smart brain on: Qwen 2.5 1.5B, about 1 GB.');
 }
 const askBrain = () => palette({ items: commands(), parse: q => parseCommand(q) ?? brainItem(q), placeholder: 'Tell the brain what to do, like "darker chords, 808 slides every 4 bars and humanize the drums"' });
 // A drummer's feel, variations and fills for the pattern you're in
@@ -984,7 +1091,8 @@ function newPartMenu(anchor) {
     { label: 'Tell the brain…', hint: 'Ctrl+K', icon: 'brain', onSelect: askBrain },
     { label: 'Hum a melody', hint: 'Into the microphone', icon: 'mic', onSelect: startHum },
     { label: 'Smart brain for anything it doesn’t know', hint: `Free, ${SMART_MODELS[ui.smartSize ?? 'fast'].size} once`, active: ui.smart, onSelect: toggleSmart },
-    { label: 'Best smart brain', hint: 'Understands much more; needs a strong graphics card, 5 GB once', active: ui.smartSize === 'best', onSelect: toggleSmartSize },
+    { label: 'Best smart brain', hint: 'Understands more; fits a 4 GB graphics card, 2 GB once', active: ui.smartSize === 'best', onSelect: toggleSmartSize },
+    { label: 'Connect a free AI…', hint: 'The smartest option', icon: 'brain', active: !!aiKey(), onSelect: aiDialog },
     { label: 'Humanize the drums', hint: 'A drummer\'s feel', icon: 'brain', onSelect: aiHumanizeButton },
     { label: 'Vary the drums', hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('drums') },
     { label: `Vary ${trackName(melodic())}`, hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('melody') },
@@ -2382,6 +2490,24 @@ function renderRoll() {
     reselect(list, out);
     changed();
   };
+  const remake = fn => {  // tools that change how many notes there are
+    const f = editable(t), list = targets();
+    if (!list.length) return hint('There are no notes to change. Draw some, or select some with Ctrl-drag.');
+    const old = new Set(list), out = fn(list);
+    t[f] = tidy([...t[f].filter(n => !old.has(n)), ...out]);
+    rollSel = new Set(rollSel.size ? out.filter(n => t[f].includes(n)) : []);
+    changed();
+  };
+  const toolsMenu = e => menu(e.currentTarget, [
+    { heading: rollSel.size ? `The ${rollSel.size} selected notes` : 'All the notes here' },
+    { label: 'Strum', hint: 'Chords fan out, low to high', onSelect: () => transform(list => strum(list)) },
+    { label: 'Arpeggiate', hint: 'Chords play one note at a time', onSelect: () => remake(list => arpeggiate(list, rollGrid() * 2)) },
+    { label: 'Chop', hint: 'Long notes become repeats', onSelect: () => remake(list => chop(list, rollGrid() * 2)) },
+    { label: 'Flam', hint: 'A quiet grace note before each', onSelect: () => remake(list => flam(list)) },
+    { label: 'Reverse', hint: 'Play them backwards', onSelect: () => transform(list => reverseNotes(list)) },
+    { label: 'Fade up', hint: 'Quiet to loud', onSelect: () => transform(list => ramp(list, true)) },
+    { label: 'Fade down', hint: 'Loud to quiet', onSelect: () => transform(list => ramp(list, false)) },
+  ]);
   V.roll.tools.replaceChildren(...[
     toolBar(ui.rollTool, 'roll'),
     picker({ label: 'Channel', value: t.id, options: melodic.map(m => ({ value: m.id, label: trackName(m), swatch: m.color })), onChange: v => { ui.selected = v; rollSel.clear(); renderRoll(); renderPads(); } }),
@@ -2391,6 +2517,8 @@ function renderRoll() {
     h('button', { class: 'btn small', 'aria-pressed': ui.scaleSnap, title: `Keep new and moved notes in ${NOTES[song.root]} ${song.mode}`, onclick: () => { ui.scaleSnap = !ui.scaleSnap; save(); renderRoll(); } }, icon('magnet', 14), 'Scale'),
     h('button', { class: 'btn small', title: 'Snap the selected notes (or all) to the grid (Q)', onclick: () => transform(list => quantize(list, rollGrid())) }, 'Quantize'),
     h('button', { class: 'btn small', title: 'Loosen timing and velocity a little, like a player', onclick: () => transform(list => humanize(list, Math.random)) }, 'Humanize'),
+    h('button', { class: 'btn small', id: 'roll-tools-menu', title: 'Strum, arpeggiate, chop, flam, reverse and fades', onclick: toolsMenu }, 'Tools'),
+    h('button', { class: 'btn small', 'aria-pressed': !!ui.ghosts, title: 'Show the other channels faintly behind this one', onclick: () => { ui.ghosts = !ui.ghosts; save(); renderRoll(); } }, 'Ghosts'),
     t.id === 'melody' ? h('button', { class: 'btn small', onclick: () => aiMelodyButton() }, icon('brain', 14), `AI melody`) : null,
     t.kind !== 'drum' ? h('button', { class: 'btn small', title: 'Hum or sing this part into the microphone; BeatLab writes the notes in the key', onclick: startHum }, icon('mic', 14), 'Hum it') : null,
     t.kind !== 'drum' ? h('button', { class: 'btn small', title: 'The AI writes a variation of this part. Press again for the next one', onclick: () => aiVaryButton('melody') }, icon('brain', 14), 'Vary') : null,
@@ -2405,7 +2533,7 @@ function renderRoll() {
   const scroll = h('div', { class: 'roll-scroll' }, h('div', { class: 'roll-inner', style: `height:${rows * rh}px` }, keys, cv), h('div', { class: 'playhead', id: 'roll-head', style: 'left:60px' }));
   const velRow = h('div', { class: 'vel' }, h('span', {}, 'Velocity'), vel);
   V.roll.body.replaceChildren(h('div', { class: 'proll' }, top, scroll, velRow));
-  const ghost = t.id !== 'chords' ? track('chords') : null;
+  const ghosts = ui.ghosts ? melodic.filter(m => m !== t) : t.id !== 'chords' && track('chords') ? [track('chords')] : [];
   let box = null;
   const draw = () => {
     const w = cv.clientWidth, ht = rows * rh, dpr = devicePixelRatio || 1, P = pal();
@@ -2423,9 +2551,9 @@ function renderRoll() {
       g.fillStyle = c % 16 === 0 ? P.strong : c % 4 === 0 ? P.grid : P.hilite;
       g.fillRect(Math.round(c * cw), 0, 1, ht);
     }
-    if (ghost) {  // the chords, faintly, so lines are easy to fit
-      g.fillStyle = P.muted;
-      g.globalAlpha = 0.18;
+    for (const ghost of ghosts) {  // other channels, faintly, so lines are easy to fit
+      g.fillStyle = ui.ghosts ? ghost.color ?? P.muted : P.muted;
+      g.globalAlpha = ui.ghosts ? 0.3 : 0.18;
       for (const n of notesFor(ghost, ui.pattern)) if (n.p >= lo && n.p <= hi) g.fillRect(n.t / STEP * cw, (hi - n.p) * rh + 2, n.d / STEP * cw, rh - 5);
       g.globalAlpha = 1;
     }
@@ -3335,7 +3463,7 @@ async function songAgent() {
 }
 
 // ---------- the chat: the brain as a side panel that knows the project; every change can be reviewed ----------
-const CHAT_IDEAS = ['Make a drill beat at 142 with 808 slides every 2 bars', 'Turn this loop into a full song', 'What key is this in?', 'Half-time the hats on the last beat', 'Check my mix', 'Hum a melody'];
+const CHAT_IDEAS = ['Make a drill beat at 142 with 808 slides every 2 bars', 'Use a 1 6 4 5 progression', 'Make it feel expensive', 'Put a pause before the hook', 'What should I add next?', 'Turn this loop into a full song'];
 const chatLog = () => (ui.chat ??= []);
 function openChat(prefill = '') {
   $('#chat').hidden = false;
@@ -3357,11 +3485,13 @@ function renderChat() {
   const log = $('#chat-log'), list = chatLog();
   const welcome = h('div', { class: 'chat-hello' },
     h('b', {}, 'Ask the brain anything about this beat.'),
+    aiKey() ? null : h('div', { class: 'chat-connect' }, h('b', {}, 'Make it actually smart'), h('p', {}, 'The built-in brain follows rules and misses a lot. Connect a free AI in about a minute and it understands anything you type and writes melodies and drums itself.'), h('button', { class: 'key primary btn', onclick: aiDialog }, 'Connect a free AI')),
     h('p', {}, 'It knows your channels, patterns, key and mix. It shows what it changed, and you choose Keep or Undo, or A/B to hear before and after. Type @ to name a channel or pattern. Select notes in the piano roll to change only those.'),
     h('div', { class: 'chat-ideas' }, CHAT_IDEAS.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x))));
   log.replaceChildren(...(list.length ? list.map(chatEntry) : [welcome]));
   log.scrollTop = log.scrollHeight;
   $('#chat-ctx').replaceChildren(...chatContext());
+  $('#chat-who').replaceChildren(aiName() ? `Connected to ${aiName()}` : 'Built-in brain', ' · ', h('button', { class: 'linkish', onclick: aiDialog }, aiName() ? 'Change' : 'Connect a free AI'));
 }
 function chatEntry(e) {
   if (e.who === 'you') return h('div', { class: 'msg you' }, e.text);
@@ -3370,8 +3500,9 @@ function chatEntry(e) {
     e.text ? h('p', {}, e.text) : null,
     e.said?.length ? h('ul', { class: 'said' }, e.said.map(s => h('li', { class: s.startsWith('✗') ? 'no' : '' }, s.replace(/^[✓✗] /, '')))) : null,
     e.diff?.length ? h('div', { class: 'diff' }, h('small', {}, 'What changed'), h('ul', {}, e.diff.map(d => h('li', {}, d)))) : null,
-    e.ideas?.length ? h('div', { class: 'chat-ideas' }, h('small', {}, 'Closest things I can do:'), ...e.ideas.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x)),
-      !ui.smart && smartAvailable() ? h('button', { class: 'btn small', title: 'A free AI model on this computer reads what the rules don’t', onclick: () => { toggleSmart(); sendChat(e.ask); } }, 'Ask the smart brain instead') : null) : null,
+    e.ideas?.length ? h('div', { class: 'chat-ideas' }, h('small', {}, e.lost ? 'Closest things I can do:' : 'Try next:'), ...e.ideas.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x)),
+      e.lost && !aiKey() ? h('button', { class: 'btn small', title: 'A real AI understands anything you type. It’s free.', onclick: aiDialog }, 'Connect a free AI for this') : null,
+      e.lost && e.ask && !aiKey() && !ui.smart && smartAvailable() ? h('button', { class: 'btn small', title: 'A free AI model on this computer reads what the rules don’t', onclick: () => { toggleSmart(); sendChat(e.ask); } }, 'Ask the smart brain instead') : null) : null,
     live ? h('div', { class: 'review' },
       h('button', { class: 'key primary btn', onclick: () => reviewChat(e, 'keep') }, 'Keep'),
       h('button', { class: 'btn', onclick: () => reviewChat(e, 'undo') }, 'Undo'),
@@ -3423,6 +3554,12 @@ function diffSongs(a, b) {
 }
 // Questions about the project get answers, not edits
 function answerQuestion(q) {
+  const tip = advise(q, song, ui.pattern);
+  if (tip) return tip;
+  const text = projectFact(q);
+  return text ? { text, ideas: [] } : null;
+}
+function projectFact(q) {
   const t = q.toLowerCase();
   if (!/\?\s*$|^(what|which|how many|how long|how fast|tell me|list|show me|explain)\b/.test(t.trim()) || /\b(make|add|turn|set|change|mute|remove)\b/.test(t)) return null;
   const parts = song.tracks.filter(x => x.kind !== 'bus');
@@ -3448,7 +3585,10 @@ function selectionEdit(q) {
   else if (/\b(louder|harder|softer|quieter)\b/.test(s)) { const d = /louder|harder/.test(s) ? 18 : -18; out = list.map(n => ({ ...n, v: clamp(n.v + d, 20, 127) })); what = d > 0 ? 'louder' : 'softer'; }
   else if (/\b(shorter|staccato|choppy)\b/.test(s)) { out = list.map(n => ({ ...n, d: Math.max(STEP / 2, Math.round(n.d / 2)) })); what = 'shorter'; }
   else if (/\b(longer|legato|connect|smooth)\b/.test(s)) { const sorted = [...list].sort((a, b) => a.t - b.t); out = list.map(n => { const next = sorted.find(m => m.t > n.t); return { ...n, d: next ? next.t - n.t : n.d * 2 }; }); what = 'made legato'; }
-  else if (/\b(reverse|backwards)\b/.test(s)) { const a = Math.min(...list.map(n => n.t)), b = Math.max(...list.map(n => n.t + n.d)); out = list.map(n => ({ ...n, t: a + b - n.t - n.d })); what = 'reversed'; }
+  else if (/\b(reverse|backwards)\b/.test(s)) { out = reverseNotes(list); what = 'reversed'; }
+  else if (/\bstrum\b/.test(s)) { out = strum(list); what = 'strummed'; }
+  else if (/\b(arpeggiate|arp)\b/.test(s)) { const f2 = arpeggiate(list); t[f] = tidy([...t[f].filter(n => !rollSel.has(n)), ...f2]); rollSel = new Set(f2); changed(); return `${list.length} selected notes in ${trackName(t)} arpeggiated.`; }
+  else if (/\b(fade|ramp|crescendo)\b/.test(s)) { out = ramp(list, !/\b(down|out)\b/.test(s)); what = 'faded'; }
   else if (/\b(delete|remove|clear)\b/.test(s)) { t[f] = t[f].filter(n => !rollSel.has(n)); rollSel.clear(); changed(); return `Deleted ${list.length} notes.`; }
   if (!out) return null;
   const map = new Map(list.map((n, i) => [n, out[i]]));
@@ -3463,18 +3603,18 @@ async function sendChat(text) {
   $('#chat-in').value = '';
   const log = chatLog();
   log.push({ who: 'you', text });
-  const before = songJSON(), answer = answerQuestion(text), sel = answer ? null : selectionEdit(text);
+  const before = songJSON(), answer = aiKey() ? null : answerQuestion(text), sel = answer ? null : selectionEdit(text);
   if (sel) commit(songJSON());  // into the undo history now, so Keep, Undo and A/B point at this change
-  if (answer || sel) log.push({ who: 'brain', text: answer ?? sel, ...(sel && before !== songJSON() ? { diff: diffSongs(JSON.parse(before), song), at: history.at } : {}) });
+  if (answer || sel) log.push({ who: 'brain', text: answer?.text ?? sel, ideas: answer?.ideas, ...(sel && before !== songJSON() ? { diff: diffSongs(JSON.parse(before), song), at: history.at } : {}) });
   else {
     renderChat();
     $('#chat-send').disabled = true;
-    const r = await runBrain(text, { quiet: true });
+    const r = await runBrain(text, { quiet: true, aiFirst: true });
     $('#chat-send').disabled = false;
     const after = songJSON();
     if (before !== after) commit(after);  // the history usually catches up a moment later; Keep, Undo and A/B need it now
-    const lost = r?.said.some(s => s.startsWith('✗ Didn’t') || s.startsWith("✗ Didn't") || s.includes("couldn't turn"));
-    log.push(r ? { who: 'brain', said: r.said, diff: before === after ? [] : diffSongs(JSON.parse(before), JSON.parse(after)), at: before === after ? null : history.at, ...(lost ? { ideas: closest(text), ask: text } : {}) } : { who: 'brain', text: 'I’m still busy with the last request. Try again in a moment.' });
+    const lost = r?.lost || r?.said.some(s => s.includes("couldn't turn"));
+    log.push(r ? { who: 'brain', text: r.say, said: r.said, diff: before === after ? [] : diffSongs(JSON.parse(before), JSON.parse(after)), at: before === after || r.undone ? null : history.at, ...(lost ? { ideas: closest(text), ask: text, lost: true } : r.ideas?.length ? { ideas: r.ideas } : {}) } : { who: 'brain', text: 'I’m still busy with the last request. Try again in a moment.' });
   }
   log.splice(0, Math.max(0, log.length - 40));
   save();

@@ -573,6 +573,11 @@
   .chatbtn .icon { color: var(--accent); }
   .chat { position: fixed; z-index: 60; top: 12px; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)); grid-template-rows: 48px minmax(0, 1fr) auto; box-shadow: 0 30px 80px rgba(0,0,0,0.55); }
   .chat .chat-sub { color: var(--subtle); font-size: 11px; }
+  .chat .chat-sub .linkish { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+  .ai-steps { margin: 10px 0 14px 20px; display: grid; gap: 6px; }
+  .chat-connect { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 10px 0; display: grid; gap: 8px; justify-items: start; }
+  .chat-connect p { margin: 0; }
+  .chat-connect .btn { height: 34px; }
   .chat-log { overflow-y: auto; padding: 4px 14px 12px; display: grid; align-content: start; gap: 10px; }
   .chat-hello { display: grid; gap: 10px; padding: 10px 2px; }
   .chat-hello b { font-weight: 500; font-size: 14px; }
@@ -697,7 +702,7 @@
   <div class="seg small" role="group" aria-label="Layout"><button data-layout="rig" title="One big screen over the devices">Rig</button><button data-layout="daw" title="FL-style floating windows over the playlist">DAW</button></div>
 </nav>
 <header class="top">
-  <a class="brand" href="/" title="Back to the BeatLab home page"><span class="logo" aria-hidden="true"></span><b>BeatLab</b></a>
+  <a class="brand" href="./" title="Back to the BeatLab home page"><span class="logo" aria-hidden="true"></span><b>BeatLab</b></a>
   <button class="proj" id="project" aria-haspopup="menu" title="Projects: new, open, versions, info and project files"><b id="proj-name">Untitled</b><small id="proj-state">Not saved yet</small></button>
   <div class="group"><button class="iconbtn" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo"></button><button class="iconbtn" id="redo" title="Redo (Ctrl+Y)" aria-label="Redo"></button></div>
   <div class="readout"><div class="seg mode" role="group" aria-label="Play the pattern or the whole song"><button data-mode="pattern" aria-pressed="true" title="Play the selected pattern on a loop (L)">PAT</button><button data-mode="song" aria-pressed="false" title="Play the whole playlist (L)">SONG</button></div><span class="legend">Mode</span></div>
@@ -825,7 +830,7 @@
 </footer>
 
 <aside class="chat window" id="chat" aria-label="Chat with the brain" hidden>
-  <div class="wtitle"><span class="wname">Brain chat</span><small class="chat-sub">Knows this project · runs on this computer</small><span class="grow"></span><button class="iconbtn" id="chat-close" aria-label="Close the chat" title="Close (Esc)">✕</button></div>
+  <div class="wtitle"><span class="wname">Brain chat</span><small class="chat-sub" id="chat-who"></small><span class="grow"></span><button class="iconbtn" id="chat-close" aria-label="Close the chat" title="Close (Esc)">✕</button></div>
   <div class="chat-log" id="chat-log" aria-live="polite"></div>
   <form class="chat-box" id="chat-form"><div class="chat-ctx" id="chat-ctx"></div><div class="chat-row"><textarea id="chat-in" rows="2" placeholder="Ask or tell the brain anything. @ names a channel or pattern." aria-label="Message the brain"></textarea><button class="key primary" id="chat-send" type="submit">Send</button></div></form>
 </aside>

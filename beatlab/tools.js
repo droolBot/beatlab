@@ -14,6 +14,42 @@ export function humanize(notes, rng, { time = 6, vel = 12 } = {}) {
   return notes.map(n => ({ ...n, t: Math.max(0, Math.round(n.t + (rng() * 2 - 1) * time)), v: clamp(Math.round(n.v + (rng() * 2 - 1) * vel), 1, 127) }));
 }
 
+// Notes that start together fan out, low to high, like a hand across strings
+export function strum(notes, gap = 6) {
+  return notes.map(n => {
+    const o = notes.filter(m => m.t === n.t && m.p < n.p).length * gap;
+    return { ...n, t: n.t + o, d: Math.max(2, n.d - o) };
+  });
+}
+// A quiet grace note just before each note
+export const flam = (notes, ticks = 8) => notes.flatMap(n => [{ ...n, t: Math.max(0, n.t - ticks), d: Math.min(ticks, n.d), v: clamp(n.v - 35, 1, 127) }, n]);
+// Each chord is played one note at a time for as long as it lasted, going up and down
+export function arpeggiate(notes, rate = 2 * STEP) {
+  const chords = new Map();
+  for (const n of notes) (chords.get(n.t) ?? chords.set(n.t, []).get(n.t)).push(n);
+  return [...chords.values()].flatMap(c => {
+    const up = [...c].sort((a, b) => a.p - b.p), path = up.length > 2 ? [...up, ...up.slice(1, -1).reverse()] : up, out = [], end = up[0].t + Math.max(...up.map(n => n.d));
+    for (let t = up[0].t, i = 0; t < end; t += rate, i++) out.push({ ...path[i % path.length], t, d: Math.min(rate, end - t) });
+    return out;
+  });
+}
+// Long notes become repeated short ones
+export const chop = (notes, len = 2 * STEP) => notes.flatMap(n => {
+  const out = [];
+  for (let t = n.t; t < n.t + n.d; t += len) out.push({ ...n, t, d: Math.min(len, n.t + n.d - t) });
+  return out;
+});
+// The notes play backwards, inside the time they took
+export function reverseNotes(notes) {
+  const a = Math.min(...notes.map(n => n.t)), b = Math.max(...notes.map(n => n.t + n.d));
+  return notes.map(n => ({ ...n, t: a + b - n.t - n.d }));
+}
+// A fade in level across the notes, quiet to loud or the other way
+export function ramp(notes, up = true) {
+  const a = Math.min(...notes.map(n => n.t)), b = Math.max(...notes.map(n => n.t)), span = Math.max(1, b - a);
+  return notes.map(n => { const x = (n.t - a) / span; return { ...n, v: clamp(Math.round(35 + 85 * (up ? x : 1 - x)), 1, 127) }; });
+}
+
 // k hits spread as evenly as possible over n steps, starting on the downbeat, then rotated.
 // 3 over 8 gives x..x..x., the tresillo.
 export function euclid(k, n, rotate = 0) {

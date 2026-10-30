@@ -54,7 +54,7 @@ export function correlation(l, r) {
 
 const LIST = xs => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 const dB = x => `${x > 0 ? '+' : ''}${x.toFixed(1)} dB`;
-const LOW_OK = new Set(['bass', 'drum']);  // the parts that are meant to carry low end
+const LOW_OK = new Set(['bass', 'drum', 'fx']);  // the parts that are meant to carry low end (an impact is all low end)
 
 // mix: { l, r, lufs, peak (dBFS) }; parts: [{ id, name, kind, x, lufs, duck, lowCut, target }]; master: { glue, width }
 // Returns { score, issues: [{ id, weight, title, detail, fix, fixLabel }] }. A fix is data the studio carries out.

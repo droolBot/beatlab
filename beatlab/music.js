@@ -371,8 +371,8 @@ function voice(root, q, prev, [lo, hi], rootless) {
   return best ?? pcs.map(pc => lo + (pc - lo % 12 + 12) % 12).sort((a, b) => a - b);
 }
 
-function buildHarmony(st, tonic, complexity, r, bars) {
-  const prog = pick(r, st.progs), out = [];
+function buildHarmony(st, tonic, complexity, r, bars, chosen) {
+  const prog = chosen ?? pick(r, st.progs), out = [];
   let t = 0, prev = null;
   while (t < bars * BAR) {
     for (const [off, q0, beats] of prog) {
@@ -424,8 +424,16 @@ export function hits(s, at, notes = []) {
 function drumPart(st, id, variants, energy, r, bars, fillLast) {
   const pat = variants[clamp(Math.round(energy * (variants.length - 1) + r() - 0.5), 0, variants.length - 1)];
   const fill = fillLast && energy > 0.2 ? st.fills?.[id] : null, notes = [];
-  for (let b = 0; b < bars; b++) hits(fill && b === bars - 1 ? fill : pat[b % pat.length], b * BAR, notes);
+  for (let b = 0; b < bars; b++) hits(fill && b === bars - 1 ? fill : turnaround(pat[b % pat.length], id, st, b, r), b * BAR, notes);
   return pocket(notes, id, st, r);
+}
+// The end of every fourth bar moves a little, the way a producer keeps a loop from sounding like a loop
+function turnaround(bar, id, st, b, r) {
+  if (b % 4 !== 3) return bar;
+  if (id === 'hat' && st.feel < 0.05 && r() < 0.8) return `${bar.slice(0, 12)}${pick(r, ['x.rr', 'xrx.', 'tt..', 'x.tr'])}`;
+  if (id === 'kick' && r() < 0.6) return `${bar.slice(0, 13)}${pick(r, ['.x.', 'x..', '..x'])}`;
+  if (id === 'snare' && r() < 0.5 && bar[15] === '.') return `${bar.slice(0, 15)}o`;
+  return bar;
 }
 
 // Drums for the hook (A), the verse (B, a notch sparser) and a one-bar fill before each hook
@@ -551,25 +559,33 @@ function onsets(rh) {
   return out;
 }
 
+const CONTOURS = [[1, 1, -1, -1, 2, -2], [2, -1, -1, 1, 1, -2], [-1, -1, 2, 1, -1, -1], [1, -2, 1, 2, -1, -1], [0, 2, -1, 0, -1, -1], [3, -1, -1, -1, 1, -1]];
 // Two-bar motif A, varied, A again, then a new answer B. The motif is a contour (scale-step moves),
 // so each repeat re-fits itself to the chords underneath; long and on-beat notes land on chord tones.
 function buildMelody(st, harmony, scale, r, complexity, density = 0) {
   const [lo, hi] = st.melody.range;
   let set = st.melody.rhythms;
   if (set !== 'cowbell') set = DENSITY[clamp(DENSITY.indexOf(set) + (complexity < 0.34 ? -1 : complexity > 0.67 ? 1 : 0) + density, 0, 2)];
-  const motif = () => onsets(pick(r, RHYTHMS[set])).map(o => ({ ...o, move: pick(r, [-3, -2, -1, -1, 0, 1, 1, 2, 3]) }));
+  // A motif follows a contour that goes somewhere and comes back, not a random walk
+  const motif = () => {
+    const shape = pick(r, CONTOURS), flip = r() < 0.3 ? -1 : 1;
+    return onsets(pick(r, RHYTHMS[set])).map((o, k) => ({ ...o, move: k ? flip * shape[(k - 1) % shape.length] : 0 }));
+  };
   const A = motif(), B = motif();
-  const A2 = A.map((o, k) => k >= A.length - 3 ? { ...o, move: pick(r, [-2, -1, 1, 2]) } : o);
+  const A2 = A.map((o, k) => k >= A.length - 2 ? { ...o, move: pick(r, [-2, -1, 1, 2]) } : o);
   const notes = [];
   let first = null;
   [A, A2, A, B].forEach((m, slot) => {
-    let p = null;
+    let p = null, prev = [];
     m.forEach((o, k) => {
-      const t = slot * 2 * BAR + o.t, chord = chordAt(harmony, t);
-      p = p === null ? nearestOf(first ?? lo + (hi - lo) * 0.6, chord.pcs, lo, hi) : stepIn(p, o.move, chordScale(chord.pcs, scale), lo, hi);
-      const strong = o.t % (8 * STEP) === 0 || o.d >= 4 * STEP;
-      if (strong || k === m.length - 1) p = nearestOf(p, chord.pcs, lo, hi);
-      notes.push({ t, d: o.d, p, v: strong ? 100 : 88 });
+      const t = slot * 2 * BAR + o.t, chord = chordAt(harmony, t), tones = chordScale(chord.pcs, scale);
+      p = p === null ? (slot === 3 && first != null ? stepIn(first, 2, chord.pcs, lo, hi) : nearestOf(first ?? lo + (hi - lo) * 0.6, chord.pcs, lo, hi)) : stepIn(p, o.move, tones, lo, hi);  // the answer starts higher
+      const strong = o.t % (8 * STEP) === 0 || o.d >= 4 * STEP, ending = k === m.length - 1;
+      if (strong || ending) p = nearestOf(p, chord.pcs, lo, hi);
+      if (ending && slot === 3) p = nearestOf(p, [chord.root], lo, hi);  // the phrase comes home on the root
+      if (prev.length === 2 && prev[0] === p && prev[1] === p) p = stepIn(p, r() < 0.5 ? 1 : -1, tones, lo, hi);  // never three in a row
+      prev = [...prev.slice(-1), p];
+      notes.push({ t, d: o.d, p, v: strong ? 100 : k % 2 ? 84 : 90 });
     });
     if (slot === 0) first = notes[0]?.p ?? null;
   });
@@ -593,10 +609,10 @@ const defaultSections = () => [
 // Build a beat: pattern A (hook), pattern B (verse), fills, arrangement and mix.
 // Each part has its own seed so it can be re-rolled alone. `groove` replaces the style's drum
 // patterns with ones copied from a reference song; `kick` keeps an edited kick for the 808 to follow.
-export function generate({ style, bpm, root, mode, energy = 0.5, complexity = 0.5, seeds = {}, kick, kickB, groove }) {
+export function generate({ style, bpm, root, mode, energy = 0.5, complexity = 0.5, seeds = {}, kick, kickB, groove, prog }) {
   const st = STYLES[style], bars = 8, tonic = tonicOf(st, root, mode), scale = SCALES[st.mode].map(i => (tonic + i) % 12);
   seeds = { chords: seed(), drums: seed(), bass: seed(), melody: seed(), ...seeds };
-  const harmony = buildHarmony(st, tonic, complexity, rng(seeds.chords), bars);
+  const harmony = buildHarmony(st, tonic, complexity, rng(seeds.chords), bars, prog);
   const drums = buildDrums(st, energy, rng(seeds.drums), bars, groove);
   const parts = {};
   for (const [id, d] of Object.entries(drums)) parts[id] = { notes: d.A, notesB: d.B, fill: d.fill };
@@ -610,10 +626,10 @@ export function generate({ style, bpm, root, mode, energy = 0.5, complexity = 0.
   parts.fx = { notes: [] };  // risers and impacts are placed by arrange() at section changes
   const soundOf = id => ({ bass: st.bass.sound, chords: st.chords.sound, melody: st.melody.sound, arp: st.arp?.sound })[id] ?? st.sounds?.[id] ?? DEFAULT_SOUND[id];
   const tracks = TRACKS.filter(([id]) => parts[id]).map(([id, kind]) => ({
-    id, kind, sound: soundOf(id), ...parts[id], color: COLORS[id], params: {}, fx: structuredClone(st.fx?.[id] ?? []), duck: st.duck?.[id] ?? 0,
+    id, kind, sound: soundOf(id), ...parts[id], color: COLORS[id], params: {}, fx: [...structuredClone(st.fx?.[id] ?? []), ...(id === 'chords' && !st.fx?.chords?.some(f => f.type === 'width') ? [{ type: 'width', width: 1.4 }] : [])], duck: st.duck?.[id] ?? (id === 'bass' ? 0.5 : 0),
     vol: MIX[id].vol, pan: MIX[id].pan ?? 0, rev: MIX[id].rev ?? 0, dly: MIX[id].dly ?? 0, mute: false, solo: false,
   }));
-  return toPlaylist({ style, bpm, root, mode, energy, complexity, seeds, bars, swing: st.swing, harmony, tracks, sections: defaultSections() });
+  return toPlaylist({ style, bpm, root, mode, energy, complexity, seeds, prog, bars, swing: st.swing, harmony, tracks, sections: defaultSections() });
 }
 
 // Re-roll some parts, keeping every other track (and all mixer settings, effects and samples) as they are
@@ -643,8 +659,27 @@ export function refresh(song, changes, ids) {
   return out;
 }
 const PARTS = { drums: ['kick', 'snare', 'hat', 'openhat', 'perc', 'bass'], chords: ['chords', 'arp', 'bass', 'melody'], bass: ['bass'], melody: ['melody'] };
-export const regenerate = (song, part) => refresh(song, { seeds: { ...song.seeds, [part]: seed() } }, PARTS[part]);
+export const regenerate = (song, part) => refresh(song, { seeds: { ...song.seeds, [part]: seed() }, ...(part === 'chords' ? { prog: null } : {}) }, PARTS[part]);
+// A progression you name, by scale degrees ("1 6 4 5") or chord names ("Am7 F C G"). The chords, arp, bass and
+// melody re-fit to it. Degrees count from the song's key and take the chord that key's scale gives them.
+const QUALITY = { '': 'M', maj: 'M', m: 'm', min: 'm', 7: '7', maj7: 'maj7', m7: 'm7', min7: 'm7', add9: 'add9', madd9: 'madd9', maj9: 'maj9', m9: 'm9', 9: '9', 13: '13', dim: 'm', sus: 'M', sus2: 'M', sus4: 'M' };
+export function chordRoot(name) {
+  const m = /^([a-g])(#|b)?(.*)$/i.exec(String(name).trim());
+  if (!m || !(m[3].toLowerCase() in QUALITY)) return null;
+  return { pc: (NOTES.indexOf(m[1].toUpperCase()) + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + 12) % 12, q: QUALITY[m[3].toLowerCase()] };
+}
+export function setProgression(song, { degrees, names }) {
+  const st = STYLES[song.style], tonic = tonicOf(st, song.root, song.mode), scale = SCALES[isMinor(song.mode) ? 'minor' : 'major'];
+  const chords = names?.length ? names.map(chordRoot).filter(Boolean) : (degrees ?? []).filter(d => d >= 1 && d <= 7).map(d => {
+    const i = d - 1, third = (scale[(i + 2) % 7] - scale[i] + 12) % 12;
+    return { pc: (song.root + scale[i]) % 12, q: third === 3 ? 'm' : 'M' };
+  });
+  if (!chords.length) return song;
+  const beats = chords.length <= 4 ? Math.max(4, Math.floor(32 / chords.length / 4) * 4) : 4;
+  return refresh(song, { prog: chords.map(c => [(c.pc - tonic + 12) % 12, c.q, beats]) }, PARTS.chords);
+}
 export const changeMode = (song, mode) => refresh(song, { mode }, PARTS.chords);
+export const richerChords = (song, delta) => refresh(song, { complexity: clamp((song.complexity ?? 0.5) + delta, 0, 1) }, PARTS.chords);
 
 export function transpose(song, root) {
   const diff = ((root - song.root + 18) % 12) - 6, pc = x => (x + diff + 12) % 12;

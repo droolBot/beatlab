@@ -185,6 +185,10 @@
       <header><p class="eyebrow">Talk to the brain</p><h2>Type what you want</h2></header>
       <p>Press <kbd>Ctrl+K</kbd> (or <b>Ask</b> in the Brain panel) and type a request in plain words. The brain shows you its plan first. Press <kbd>Enter</kbd> and it does it as ordinary edits you can change. One <kbd>Ctrl+Z</kbd> takes the whole request back. Join several requests with commas or “and”.</p>
       <p>Type it the way you’d say it to another producer. It gets complaints (“the kick is too quiet”, “808 not hitting”, “i dont like the chords”, “its too slow”), moods (“make it sad”), sound swaps (“make the melody a flute”), “sidechain the 808”, slang and typos. When it doesn’t get something, it offers the closest things it can do: press one to do it.</p>
+      <p>It keeps up with the conversation: “more”, “too much”, “same for the hats”, “now the chords”, “try again” and “undo that” all work on what you just did. It can change the music itself: name a progression, leave a gap before the hook, bring parts in at a bar, layer a sound, add a counter melody. It turns a feeling into several changes (“make it feel expensive”, “sounds like a ringtone”) and answers questions from your project (“what should I add next?”).</p>
+      <h3>Connect a free AI</h3>
+      <p>The built-in brain follows rules, so it still misses a lot. For one that understands anything you type, press <b>Connect a free AI</b> in the chat. Make a free key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a> (a Google key from aistudio.google.com/apikey works too) and paste it in. The AI then reads your request, the chat so far and your project, and it can write melodies, chords and drums itself. Everything it does still shows up as changes you can Keep or Undo.</p>
+      <p class="note">What gets sent to the service: your words, the recent chat and a text summary of the project. Your audio and files stay on your computer. The key is kept in this browser only. Free plans have limits; when one runs out, the built-in brain takes over.</p>
       <p>These are real examples. Each shows what the brain says it will do:</p>
       <div class="say" id="brain-examples"><div><code>make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4 bars</code><ul><li>Make a new Drill beat at 142 BPM</li><li>Add 808 slides every 2 bars</li><li>Add hi-hat rolls every 4 bars</li></ul></div></div>
       <h3>The chat <kbd>Ctrl+I</kbd></h3>
@@ -198,7 +202,7 @@
       </ul>
       <h3>Autocomplete</h3>
       <p>Write a few notes of a melody or bass line in the piano roll, or a few steps in the channel rack, then pause. The AI suggests what comes next, faintly: a dashed outline in the roll, dashed steps in the rack. Press <kbd>Tab</kbd> (or <b>Keep</b> on the card) to add it, or <kbd>Esc</kbd> to drop it. Keep going and the next suggestion follows. Melodies follow the chords, and drums finish the bar you’re writing. <b>Suggest</b> in the piano roll turns it off and on.</p>
-      <p class="note"><b>The smart brain.</b> For anything the brain doesn’t understand, turn on <b>Smart brain</b> in the New part menu. A free AI model (Qwen 2.5) then rewrites your request into commands BeatLab knows. It downloads once, about 1 GB, and needs a browser with WebGPU, like current Chrome or Edge. With a strong graphics card (about 6 GB of memory), pick <b>Best smart brain</b> instead: a bigger model, about 5 GB once, that understands much more. If your card can’t hold it, BeatLab goes back to the fast one by itself. It runs on your computer, and it can only do what the brain can do.</p>
+      <p class="note"><b>The smart brain.</b> For anything the brain doesn’t understand, turn on <b>Smart brain</b> in the New part menu. A free AI model (Qwen 2.5) then rewrites your request into commands BeatLab knows. It downloads once, about 1 GB, and needs a browser with WebGPU, like current Chrome or Edge. Pick <b>Best smart brain</b> for a bigger model, about 2 GB once, which fits a graphics card with 4 GB of memory. If your card can’t hold it, BeatLab goes back to the fast one by itself. Both are much weaker than a connected AI. It runs on your computer, and it can only do what the brain can do.</p>
       <p>The free Magenta models from Google do the musical parts: <b>Humanize</b> gives programmed drums a drummer’s timing, <b>Vary</b> writes a variation (press again for the next), and <b>Fill</b> plays a drum fill.</p>
     </section>
 
@@ -216,6 +220,7 @@
         <li>The tools: draw <kbd>P</kbd>, paint <kbd>B</kbd>, delete <kbd>D</kbd>, mute <kbd>T</kbd>, slice <kbd>C</kbd> and select <kbd>E</kbd>. Right-click deletes a note.</li>
         <li><b>Chord stamp</b> places a whole chord per click. <b>Scale snap</b> keeps new and moved notes in the song’s key.</li>
         <li><kbd>Ctrl+Q</kbd> quantizes, <kbd>Ctrl+L</kbd> makes notes legato, and <b>Humanize</b> loosens timing and velocity like a player.</li>
+        <li><b>Tools</b> strums, arpeggiates, chops, flams or reverses the selected notes (or all of them), and fades their level up or down. <b>Ghosts</b> shows the other channels faintly behind the one you’re editing.</li>
       </ul>
       <h3>Recording</h3>
       <ul>
@@ -337,7 +342,7 @@
       <details><summary>The sound crackles or stutters</summary><p>Press <kbd>F10</kbd> and choose a larger <b>Audio buffer</b>, Medium or Large, then reload the page. Closing other tabs helps too.</p></details>
       <details><summary>The microphone doesn’t work</summary><p>Allow the microphone for this page, using the icon in the address bar, then try again. Use headphones when you record or hum, so the beat doesn’t leak in. If takes land late, set the recording offset in <kbd>F10</kbd>.</p></details>
       <details><summary>FL Studio’s sounds are missing</summary><p>On Windows, BeatLab looks for FL Studio in Program Files. A few FL samples only play once ffmpeg is installed: run <code>winget install Gyan.FFmpeg</code> in a terminal, then restart BeatLab. On the website, press <b>Connect FL Studio</b> in Sounds on each visit.</p></details>
-      <details><summary>The smart brain won’t turn on</summary><p>It needs WebGPU, which current Chrome and Edge have on most PCs, and about 1 GB downloaded once (5 GB for the best one). Without it, typed requests still work through the regular brain.</p></details>
+      <details><summary>The smart brain won’t turn on</summary><p>It needs WebGPU, which current Chrome and Edge have on most PCs, and about 1 GB downloaded once (2 GB for the best one). Without it, typed requests still work through the regular brain.</p></details>
       <details><summary>Song search says Apple is limiting searches</summary><p>Apple allows a limited number of searches a minute. Wait a minute and search again, or drop in an audio file instead.</p></details>
       <details><summary>Where are my beats, and are they private?</summary><p>In this browser’s storage, on this computer. Nothing is uploaded: no account, no analytics, and the AI runs on your computer. Clearing the site’s data deletes your beats, so keep a project file as a backup.</p></details>
       <details><summary>Which browsers work?</summary><p>Chrome and Edge on Windows are what BeatLab is built and tested on, and Chrome on phones. Other modern browsers mostly work, but the smart brain and some features may not.</p></details>
@@ -386,6 +391,7 @@
     'autotune the vocals', 'pitch the chords up an octave', 'punchier kick',
     'auto mix', 'check my mix', 'let me hum a melody', 'export an mp3',
     'the 808 isnt hitting', 'i dont like the chords', 'make the melody a flute', 'sidechain the 808', 'its too slow and make it sad', 'mak a lofi beat for studying',
+    'use a 1 6 4 5 progression', 'put a pause before the hook', 'layer the snare with a clap', 'add a counter melody', 'drums come in at bar 5', 'make it feel expensive', 'add strings in the hook',
   ];
   document.querySelector('#brain-examples').replaceChildren(...EXAMPLES.map(s => el('div', {}, el('code', {}, s), el('ul', {}, plan(s, ctx).map(st => el('li', {}, describe(st, names)))))));
 

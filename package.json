@@ -8,7 +8,7 @@
   "scripts": {
     "start": "python beatlab.py",
     "check": "node tools/check.mjs",
-    "test": "node tools/check.mjs && node beatlab/test_music.mjs && node beatlab/test_tools.mjs && node beatlab/test_instruments.mjs && node beatlab/test_intent.mjs && node beatlab/brain_eval.mjs && node beatlab/test_dsp.mjs && node beatlab/test_doctor.mjs && node beatlab/test_hum.mjs",
+    "test": "node tools/check.mjs && node beatlab/test_music.mjs && node beatlab/test_tools.mjs && node beatlab/test_instruments.mjs && node beatlab/test_intent.mjs && node beatlab/brain_eval.mjs && node beatlab/test_edit.mjs && node beatlab/test_dsp.mjs && node beatlab/test_doctor.mjs && node beatlab/test_hum.mjs",
     "test:studio": "node tests/studio.e2e.mjs",
     "samples": "node tools/make_samples.mjs"
   }

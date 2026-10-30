@@ -24,10 +24,12 @@ Try it in your browser: **https://droolbot.github.io/beatlab/**. How to use it: 
   - **Transient shaper:** more punch or a shorter tail
 - **Sounds.** BeatLab ships its own kits (Trap, Drill, Lofi, Boom Bap, House), 808s and loops. If FL Studio is installed, BeatLab also plays FL's own packs from your install, on the website too: multi-sampled instruments, and drum kits with velocity layers.
 - **The brain.** Ctrl+K takes requests like "make a drill beat at 142, add 808 slides every 2 bars and hat rolls every 4". It shows the plan, then does it as one undo.
-  - It understands the way producers actually type: "the kick is too quiet", "808 not hitting", "i dont like the chords", "make the melody a flute", "sidechain the 808", "make it sad", slang and typos ("mak a trap beat", "louder kik").
+  - **Connect a free AI** for real understanding: paste a free Groq or Google key, and a large model reads your request, the chat and your project, then writes melodies, chords and drums itself. No BeatLab server is involved, and it's optional: your words and a text summary of the project go to that service, while your audio and files stay on your computer.
+  - Without a key, built-in rules handle everyday requests: "808 not hitting", "make the melody a flute", "sidechain the 808". They also follow the conversation ("more", "too much", "same for the hats", "undo that") and make real musical edits ("use a 1 6 4 5 progression", "put a pause before the hook", "add a counter melody", "layer the snare with a clap", "drums come in at bar 5"). A feeling becomes several changes ("make it feel expensive"). Rules still miss a lot: about half of new phrasings in our own check.
+  - It answers questions from your project ("what should I add next?", "is this in key?", "why does my kick sound weak?").
   - When it doesn't get something, it offers the closest things it can do, one click each.
   - For drums it uses Google's free Magenta models to humanize, write variations and play fills.
-  - An optional smart mode runs a language model inside your browser for sentences the rules don't understand: Fast (Qwen2.5 1.5B, 1 GB) or Best (Qwen2.5 7B, 5 GB, for strong graphics cards).
+  - An on-PC smart mode runs a language model inside your browser: Fast (Qwen2.5 1.5B, 1 GB) or Best (Llama 3.2 3B, 2 GB, fits a 4 GB graphics card). It's weaker than a connected AI, and it hasn't been tried on real hardware yet.
 - **Brain chat** (Ctrl+I). A side panel, like a code editor's AI assistant, that knows your channels, patterns, key and mix.
   - After each request it shows what changed, with **Keep**, **Undo** and **A/B** (hear before and after while it plays).
   - It answers questions about the beat, takes @mentions, and changes only the selected notes when you've selected some.
@@ -76,7 +78,7 @@ The `beatlab/` folder is the website. Every push to `main` republishes it throug
 
 ## The smart brain
 
-Typed commands work instantly and offline. Smart mode downloads a model once: Fast is about 1 GB, Best is about 5 GB and needs a graphics card with about 6 GB of memory (if yours can't hold it, BeatLab switches back to Fast by itself). To turn it on, open the menu next to **Make a beat** and pick **Smart brain for anything it doesn't know**, or **Best smart brain**. You can also type "smart brain" after Ctrl+K, or press **Ask the smart brain instead** in the chat when the brain doesn't get something. It needs WebGPU, which current Chrome and Edge have on most Windows PCs. After the first download, it runs offline.
+Typed commands work instantly and offline. Smart mode downloads a model once: Fast is about 1 GB, and Best is about 2 GB and fits a graphics card with 4 GB of memory (if yours can't hold it, BeatLab switches back to Fast by itself). To turn it on, open the menu next to **Make a beat** and pick **Smart brain for anything it doesn't know**, or **Best smart brain**. You can also type "smart brain" after Ctrl+K, or press **Ask the smart brain instead** in the chat when the brain doesn't get something. It needs WebGPU, which current Chrome and Edge have on most Windows PCs. After the first download, it runs offline.
 
 ## How it's built
 
@@ -99,10 +101,10 @@ flowchart LR
 - **No build step and no framework:** plain ES modules, in any modern browser.
 - **The maths is separate from the browser.** The sample-by-sample DSP, the mix doctor, humming, the brain's language and the music engine are pure modules. The same code runs on the audio thread and in the Node tests.
 - **Live and offline sound the same.** Playback, exports, stems, auto mix and the mix doctor all render through one engine.
-- **Everything is local.**
-  - The AI runs in your browser: rules, Magenta, and an optional Qwen2.5 model on WebGPU.
+- **Local by default.**
+  - The built-in AI runs in your browser: rules, Magenta, and an optional language model on WebGPU. Only a free AI you connect yourself sends anything out: your words and a text summary of the project.
   - Beats are saved in IndexedDB on your computer.
-  - The only outside requests are Apple's song previews and the libraries' CDN.
+  - The only other outside requests are Apple's song previews and the libraries' CDN.
 
 ## For developers
 
@@ -115,7 +117,8 @@ npm test
 That runs the unit tests:
 - syntax checks for every module
 - the music engine, note tools and instrument zoning
-- the brain's 72 phrasings, and 190 requests typed the way producers type them (`beatlab/brain_eval.mjs`, which fails below 95%)
+- the brain's 72 phrasings, 229 requests and a conversation (`beatlab/brain_eval.mjs`, which fails below 95%). This guards against going backwards; it doesn't measure how smart the brain is, because the requests are ones it was taught
+- the musical edits (`beatlab/test_edit.mjs`)
 - the DSP, measured on test signals: half-time halves the pitch, Tune pulls a sharp A back to 220 Hz
 - every mix doctor rule, on mixes built with one known problem each
 - humming to notes
@@ -139,7 +142,8 @@ That re-renders BeatLab's own sample library from its synths, into `beatlab/samp
 | `beatlab/sound.js` | Audio engine, instruments, effects, mixer, automation |
 | `beatlab/music.js` | Styles, patterns, grooves |
 | `beatlab/instruments.js` | Sample instruments and kits, pitch detection |
-| `beatlab/intent.js`, `brain.js` | The brain: sentences to steps, Magenta, the local language model |
+| `beatlab/intent.js`, `brain.js` | The brain: sentences to steps, Magenta, the local language model, the connected AI |
+| `beatlab/edit.js`, `advice.js` | Musical edits (progressions, gaps, layers, counter melodies, written notes), and answers to questions |
 | `beatlab/deliver.js` | Loudness, limiter, WAV, MP3, MIDI, zip |
 | `beatlab/dsp.js`, `dsp-worklet.js` | Sample-by-sample effects, and the AudioWorklet that runs them |
 | `beatlab/doctor.js` | The mix doctor: spectrum, the rules, the fixes |
@@ -157,7 +161,8 @@ These libraries load from jsDelivr when they're first needed:
 | [three.js](https://threejs.org) | MIT |
 | [Magenta.js](https://github.com/magenta/magenta-js) and its MusicVAE / GrooVAE checkpoints | Apache-2.0 |
 | [WebLLM](https://github.com/mlc-ai/web-llm) | Apache-2.0 |
-| [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) and [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) | Apache-2.0 |
+| [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) | Apache-2.0 |
+| [Llama 3.2 3B](https://www.llama.com/llama3_2/license/) (Built with Llama) | Llama 3.2 Community License |
 | [lamejs](https://github.com/zhuker/lamejs) | LGPL-3.0 |
 | Anton, Space Grotesk, IBM Plex Mono, Geist (Google Fonts) and DSEG7 | SIL Open Font License |
 
