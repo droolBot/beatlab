@@ -1075,7 +1075,7 @@ await test('brain: a connected AI reads the project, writes notes, and bad steps
     window.__fetch = window.fetch; window.__sent = [];
     window.fetch = async (u, o) => {
       if (!String(u).includes('api.groq.com')) return window.__fetch(u, o);
-      if (String(u).endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'llama-3.3-70b-versatile' }] }));
+      if (String(u).endsWith('/models')) return new Response(JSON.stringify({ data: [{ id: 'openai/gpt-oss-safeguard-20b' }, { id: 'openai/gpt-oss-20b' }, { id: 'openai/gpt-oss-120b' }] }));
       window.__sent.push(JSON.parse(o.body));
       const steps = [{ type: 'notes', part: 'melody', notes: [{ bar: 1, beat: 1, len: 1, pitch: 69 }, { bar: 1, beat: 3, len: 2, pitch: 72 }] }, { type: 'drums', part: 'kick', bars: ['x...x...x...x...'] }, { type: 'teleport' }];
       return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ say: 'Wrote you a line.', steps, ideas: ['add a counter melody'] }) } }] }));
@@ -1088,7 +1088,7 @@ await test('brain: a connected AI reads the project, writes notes, and bad steps
   assert(track(s, 'melody')[pid].length === 2, 'the two notes were written');
   assert(track(s, 'kick')[pid].filter(n => n.t < 1536).length >= 4, 'four on the floor');
   const sent = await ev(`window.__sent[0]`);
-  assert(sent.model === 'llama-3.3-70b-versatile' && /The project right now/.test(sent.messages[0].content) && /Channels:/.test(sent.messages[0].content), 'it was told about the project');
+  assert(sent.model === 'openai/gpt-oss-120b' && sent.reasoning_effort === 'low' && /The project right now/.test(sent.messages[0].content) && /Channels:/.test(sent.messages[0].content), 'it was told about the project');
   assert(!JSON.stringify(s).includes('gsk_'), 'the key is not in the song');
   await ev(`(() => { window.fetch = async (u, o) => (String(u).includes('api.groq.com') ? new Response('{}', { status: 429 }) : window.__fetch(u, o)); return 0; })()`);
   const fell = await chatSay('make the snare louder');

@@ -143,7 +143,8 @@ export async function smartRewrite(text, status, kind = 'fast') {
 // The browser talks to the service directly; there's no BeatLab server in between. What goes: your words, the
 // recent chat and a text summary of the project. Your audio and files never leave the computer.
 const SERVICES = [
-  { test: /^gsk_/, name: 'Groq', base: 'https://api.groq.com/openai/v1', fallback: 'llama-3.3-70b-versatile', prefer: ids => ids.find(i => i === 'llama-3.3-70b-versatile') ?? ids.find(i => /gpt-oss-120b/.test(i)) ?? ids.find(i => /llama.*versatile|llama-4/.test(i)) },
+  // ponytail: Groq retires models often (Llama 3.3 70B shut down 2026-08-16); console.groq.com/docs/deprecations names the next one
+  { test: /^gsk_/, name: 'Groq', base: 'https://api.groq.com/openai/v1', fallback: 'openai/gpt-oss-120b', prefer: ids => ids.find(i => /gpt-oss-120b$/.test(i)) ?? ids.find(i => /gpt-oss-20b$/.test(i)) },
   { test: /^AIza/, name: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', fallback: 'gemini-2.5-flash', prefer: ids => ids.filter(i => /^gemini-\d[\d.]*-flash$/.test(i)).sort((a, b) => parseFloat(b.slice(7)) - parseFloat(a.slice(7)))[0] },
 ];
 export const serviceOf = key => SERVICES.find(s => s.test.test((key ?? '').trim())) ?? null;
@@ -163,9 +164,11 @@ export async function askCloud(messages, key, status) {
   const s = serviceOf(key);
   if (!s) throw new Error('that key doesn\'t look like a Groq or Google one');
   status?.(`Asking ${s.name}…`);
+  const model = await modelId(s, key.trim());
   const r = await fetch(`${s.base}/chat/completions`, {
     method: 'POST', headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: await modelId(s, key.trim()), messages, temperature: 0.5, max_tokens: 2500, response_format: { type: 'json_object' } }),
+    // gpt-oss thinks before it answers, and the thinking counts against max_tokens: low keeps replies quick and whole
+    body: JSON.stringify({ model, messages, temperature: 0.5, max_tokens: 2500, response_format: { type: 'json_object' }, ...(/gpt-oss/.test(model) && { reasoning_effort: 'low' }) }),
   });
   if (r.status === 401 || r.status === 403) throw new Error(`${s.name} refused the key. Check it in Connect a free AI`);
   if (r.status === 429) throw new Error(`${s.name}'s free limit is used up for now. Try again in a minute`);
