@@ -139,10 +139,12 @@ export async function smartRewrite(text, status, kind = 'fast') {
   return { text: r.choices[0]?.message?.content ?? '', kind };
 }
 
-// ---------- a connected AI: a large model on a free service, with a key you made yourself ----------
-// The browser talks to the service directly; there's no BeatLab server in between. What goes: your words, the
-// recent chat and a text summary of the project. Your audio and files never leave the computer.
+// ---------- a connected AI: a large model on a free service ----------
+// With no key, the chat goes to BeatLab AI (proxy/worker.js), which passes it to Groq with the owner's key. With a key
+// you made yourself, the browser talks to the service directly. What goes: your words, the recent chat and a text
+// summary of the project. Your audio and files never leave the computer.
 const SERVICES = [
+  { test: /^$/, name: 'BeatLab AI', base: 'https://beatlab-ai.droolbot.workers.dev', fallback: 'openai/gpt-oss-120b' },  // the proxy picks the model
   // ponytail: Groq retires models often (Llama 3.3 70B shut down 2026-08-16); console.groq.com/docs/deprecations names the next one
   { test: /^gsk_/, name: 'Groq', base: 'https://api.groq.com/openai/v1', fallback: 'openai/gpt-oss-120b', prefer: ids => ids.find(i => /gpt-oss-120b$/.test(i)) ?? ids.find(i => /gpt-oss-20b$/.test(i)) },
   { test: /^AIza/, name: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', fallback: 'gemini-2.5-flash', prefer: ids => ids.filter(i => /^gemini-\d[\d.]*-flash$/.test(i)).sort((a, b) => parseFloat(b.slice(7)) - parseFloat(a.slice(7)))[0] },
@@ -150,6 +152,7 @@ const SERVICES = [
 export const serviceOf = key => SERVICES.find(s => s.test.test((key ?? '').trim())) ?? null;
 const modelFor = new Map();
 async function modelId(s, key) {
+  if (!s.prefer) return s.fallback;
   if (!modelFor.has(s.name)) {
     let id = null;
     try {
@@ -166,7 +169,7 @@ export async function askCloud(messages, key, status) {
   status?.(`Asking ${s.name}…`);
   const model = await modelId(s, key.trim());
   const r = await fetch(`${s.base}/chat/completions`, {
-    method: 'POST', headers: { Authorization: `Bearer ${key.trim()}`, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(key.trim() && { Authorization: `Bearer ${key.trim()}` }) },
     // gpt-oss thinks before it answers, and the thinking counts against max_tokens: low keeps replies quick and whole
     body: JSON.stringify({ model, messages, temperature: 0.5, max_tokens: 2500, response_format: { type: 'json_object' }, ...(/gpt-oss/.test(model) && { reasoning_effort: 'low' }) }),
   });

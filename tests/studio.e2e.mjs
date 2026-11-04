@@ -108,6 +108,7 @@ await send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 1080, de
 await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: DL.replace(/\//g, '\\') });
 await send('Page.navigate', { url: `${URL}/studio.html#still` });
 for (let i = 0; i < 60 && !(await ev(`document.querySelectorAll('#pl .lane.row').length > 0`).catch(() => false)); i++) await sleep(500);
+await ev(`localStorage.setItem('beatlab:aikey', 'off'); 0`);  // the built-in brain answers here; nothing goes to the real BeatLab AI
 await sleep(4000);
 await click(960, 1066);  // a first click on the status bar starts audio
 const uiState = async () => (await sleep(450), ev(`JSON.parse(localStorage.getItem('beatlab:v3')).ui`));
@@ -1093,9 +1094,34 @@ await test('brain: a connected AI reads the project, writes notes, and bad steps
   await ev(`(() => { window.fetch = async (u, o) => (String(u).includes('api.groq.com') ? new Response('{}', { status: 429 }) : window.__fetch(u, o)); return 0; })()`);
   const fell = await chatSay('make the snare louder');
   assert(/free limit/.test(fell) && /Turn up/.test(fell), `falls back: ${fell}`);
-  await ev(`(() => { window.fetch = window.__fetch; localStorage.removeItem('beatlab:aikey'); return 0; })()`);
+  await ev(`(() => { window.fetch = window.__fetch; localStorage.setItem('beatlab:aikey', 'off'); return 0; })()`);
   await clickSel('#chat-close'); await sleep(300);
   return 'notes and drums written, a bad step dropped, and a dead service falls back';
+});
+await test('brain: with no key, the connected AI is BeatLab AI, through the proxy', async () => {
+  await ev(`(() => {
+    localStorage.removeItem('beatlab:aikey');
+    window.__fetch = window.fetch; window.__sent = []; window.__busy = false;
+    window.fetch = async (u, o) => {
+      if (!/workers\\.dev/.test(String(u))) return window.__fetch(u, o);
+      window.__sent.push({ url: String(u), key: 'Authorization' in o.headers, body: JSON.parse(o.body) });
+      return window.__busy ? new Response('{}', { status: 429 }) : new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ say: 'It sits in a minor key, so it leans dark.' }) } }] }));
+    };
+    return 0;
+  })()`);
+  const said = await chatSay('why does it sound sad'), who = await ev(`document.querySelector('#chat-who').textContent`), sent = await ev(`window.__sent`);
+  assert(/minor key/.test(said) && /Connected to BeatLab AI/.test(who), `${who}: ${said}`);
+  assert(sent.length === 1 && /workers\.dev\/chat\/completions$/.test(sent[0].url) && !sent[0].key, `one request, to the proxy, with no key: ${JSON.stringify(sent.map(x => [x.url, x.key]))}`);
+  assert(/The project right now/.test(sent[0].body.messages[0].content), 'it was told about the project');
+  await ev(`window.__busy = true`);
+  const fell = await chatSay('make the snare louder');
+  assert(/BeatLab AI's free limit/.test(fell) && /Turn up/.test(fell), `a busy proxy falls back: ${fell}`);
+  await ev(`localStorage.setItem('beatlab:aikey', 'off'); 0`);  // what Disconnect saves
+  await chatSay('make the hats quieter');
+  assert(await ev(`window.__sent.length === 2 && /Built-in brain/.test(document.querySelector('#chat-who').textContent)`), 'disconnected, nothing is sent');
+  await ev(`(() => { window.fetch = window.__fetch; return 0; })()`);
+  await clickSel('#chat-close'); await sleep(300);
+  return `${sent[0].url}; a busy proxy falls back; Disconnect sends nothing`;
 });
 await test('piano roll: Tools menu and ghost notes', async () => {
   await key('F7'); await sleep(500);

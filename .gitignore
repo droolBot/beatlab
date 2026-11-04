@@ -5,4 +5,5 @@ trap_*/
 screenshots/
 __pycache__/
 node_modules/
+.wrangler/
 .claude/

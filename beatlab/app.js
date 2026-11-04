@@ -905,14 +905,14 @@ async function runStep(st) {
 }
 async function runBrain(text, { quiet = false, aiFirst = false } = {}) {
   if (busy) return hint('The brain is still busy with the last request. Try again in a moment.');
-  let steps = aiFirst && aiKey() ? [] : brainPlan(text), say = '', ideas = [];
+  let steps = aiFirst && aiName() ? [] : brainPlan(text), say = '', ideas = [];
   const names = brainNames(), said = [];
   busy = true;
   batching = true;
   document.querySelectorAll('#make, #new-part').forEach(b => { b.disabled = true; });
   try {
     const unknown = steps.filter(x => x.type === 'unknown');
-    if (aiKey() && (aiFirst || unknown.length)) {  // a connected AI reads the whole request, knowing the project and the chat
+    if (aiName() && (aiFirst || unknown.length)) {  // a connected AI reads the whole request, knowing the project and the chat
       try {
         const r = parseReply(await askCloud(aiMessages(text), aiKey(), aiStatus), brainCtx());
         ({ say, ideas } = r);
@@ -956,7 +956,7 @@ async function runBrain(text, { quiet = false, aiFirst = false } = {}) {
 // ---------- connecting a free AI ----------
 const AI_KEY = 'beatlab:aikey';  // on its own, so it's never inside a project file or the undo history
 function aiKey() { try { return localStorage.getItem(AI_KEY) ?? ''; } catch { return ''; } }
-const aiName = () => serviceOf(aiKey())?.name ?? null;
+const aiName = () => serviceOf(aiKey())?.name ?? null;  // no key: BeatLab AI. "off" (Disconnect): none, the built-in brain answers
 // The project in words, for a model: what's in it, the chords, and the current pattern's notes
 function brainBrief() {
   const p = pat(), bars = p?.bars ?? 8, dB = v => `${(20 * Math.log10(Math.max(1e-4, v))).toFixed(0)}dB`, beat = t => `${Math.floor(t / BAR) + 1}.${((t % BAR) / PPQ + 1).toFixed(2).replace(/\.?0+$/, '')}`;
@@ -992,13 +992,13 @@ ${brainBrief()}`;
   return [{ role: 'system', content: system }, ...recent, { role: 'user', content: text }];
 }
 function aiDialog() {
-  const input = h('input', { type: 'password', class: 'field', placeholder: 'Paste your key here', 'aria-label': 'Your AI key', autocomplete: 'off', spellcheck: 'false', value: aiKey(), style: 'width:100%' });
+  const input = h('input', { type: 'password', class: 'field', placeholder: 'Your own key, or leave it empty for BeatLab AI', 'aria-label': 'Your AI key', autocomplete: 'off', spellcheck: 'false', value: aiName() ? aiKey() : '', style: 'width:100%' });
   const state = h('p', { class: 'note', role: 'status' }, aiName() ? `Connected to ${aiName()}.` : 'Not connected. The built-in brain is answering.');
   const store = v => { try { if (v) localStorage.setItem(AI_KEY, v); else localStorage.removeItem(AI_KEY); } catch { /* private window */ } renderChat(); };
   const save = async () => {
     const key = input.value.trim();
     if (!serviceOf(key)) { state.textContent = 'That doesn\'t look like a Groq key (starts with gsk_) or a Google key (starts with AIza).'; return; }
-    state.textContent = 'Checking the key…';
+    state.textContent = 'Checking…';
     try {
       await askCloud([{ role: 'user', content: 'Reply with this JSON: {"say":"ready"}' }], key);
       store(key);
@@ -1006,15 +1006,15 @@ function aiDialog() {
     } catch (e) { state.textContent = `It didn't work: ${e.message}.`; }
   };
   openDialog({ title: 'Connect a free AI', glyph: 'brain', body: [
-    h('p', {}, 'The built-in brain follows rules. A connected AI actually understands you: it holds a conversation, knows your project and writes melodies and drums itself. It\'s free, and you make the key yourself.'),
+    h('p', {}, 'The built-in brain follows rules. A connected AI actually understands you: it holds a conversation, knows your project and writes melodies and drums itself. BeatLab AI is free and needs no key, but everyone shares it, so at busy times it runs out for a while. For a limit of your own, make a free key:'),
     h('ol', { class: 'ai-steps' },
       h('li', {}, 'Open ', h('a', { href: 'https://console.groq.com/keys', target: '_blank', rel: 'noopener' }, 'console.groq.com/keys'), ' and sign in with a free account.'),
       h('li', {}, 'Press ', h('b', {}, 'Create API Key'), ' and copy it.'),
       h('li', {}, 'Paste it below and press ', h('b', {}, 'Connect'), '.')),
     input,
-    h('div', { class: 'btnrow', style: 'display:flex;gap:8px;margin:10px 0' }, h('button', { class: 'key primary btn', onclick: save }, 'Connect'), h('button', { class: 'btn', onclick: () => { input.value = ''; store(''); state.textContent = 'Disconnected. The built-in brain is answering.'; } }, 'Disconnect')),
+    h('div', { class: 'btnrow', style: 'display:flex;gap:8px;margin:10px 0' }, h('button', { class: 'key primary btn', onclick: save }, 'Connect'), h('button', { class: 'btn', onclick: () => { input.value = ''; store('off'); state.textContent = 'Disconnected. Only the built-in brain answers, and nothing is sent.'; } }, 'Disconnect')),
     state,
-    h('p', { class: 'note' }, 'A Google Gemini key from aistudio.google.com/apikey works here too. What gets sent to the service: your words, the recent chat and a text summary of the project (channels, chords, notes). Your audio and your files stay on this computer. The key is kept in this browser only. Free plans have limits, and a service may keep what it\'s sent, so read its terms if that matters to you.'),
+    h('p', { class: 'note' }, 'A Google Gemini key from aistudio.google.com/apikey works here too. What gets sent: your words, the recent chat and a text summary of the project (channels, chords, notes). BeatLab AI passes it to Groq through a small BeatLab server that logs no messages. With your own key it goes straight to the service, and the key is kept in this browser only. Your audio and your files stay on this computer. A service may keep what it\'s sent, so read its terms if that matters to you.'),
   ] });
 }
 function toggleSmart() {
@@ -1093,7 +1093,7 @@ function newPartMenu(anchor) {
     { label: 'Hum a melody', hint: 'Into the microphone', icon: 'mic', onSelect: startHum },
     { label: 'Smart brain for anything it doesn’t know', hint: `Free, ${SMART_MODELS[ui.smartSize ?? 'fast'].size} once`, active: ui.smart, onSelect: toggleSmart },
     { label: 'Best smart brain', hint: 'Understands more; fits a 4 GB graphics card, 2 GB once', active: ui.smartSize === 'best', onSelect: toggleSmartSize },
-    { label: 'Connect a free AI…', hint: 'The smartest option', icon: 'brain', active: !!aiKey(), onSelect: aiDialog },
+    { label: 'Connect a free AI…', hint: 'The smartest option', icon: 'brain', active: !!aiName(), onSelect: aiDialog },
     { label: 'Humanize the drums', hint: 'A drummer\'s feel', icon: 'brain', onSelect: aiHumanizeButton },
     { label: 'Vary the drums', hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('drums') },
     { label: `Vary ${trackName(melodic())}`, hint: 'Press again for the next', icon: 'brain', onSelect: () => aiVaryButton('melody') },
@@ -3486,7 +3486,7 @@ function renderChat() {
   const log = $('#chat-log'), list = chatLog();
   const welcome = h('div', { class: 'chat-hello' },
     h('b', {}, 'Ask the brain anything about this beat.'),
-    aiKey() ? null : h('div', { class: 'chat-connect' }, h('b', {}, 'Make it actually smart'), h('p', {}, 'The built-in brain follows rules and misses a lot. Connect a free AI in about a minute and it understands anything you type and writes melodies and drums itself.'), h('button', { class: 'key primary btn', onclick: aiDialog }, 'Connect a free AI')),
+    aiName() ? null : h('div', { class: 'chat-connect' }, h('b', {}, 'Make it actually smart'), h('p', {}, 'The built-in brain follows rules and misses a lot. Connect a free AI in about a minute and it understands anything you type and writes melodies and drums itself.'), h('button', { class: 'key primary btn', onclick: aiDialog }, 'Connect a free AI')),
     h('p', {}, 'It knows your channels, patterns, key and mix. It shows what it changed, and you choose Keep or Undo, or A/B to hear before and after. Type @ to name a channel or pattern. Select notes in the piano roll to change only those.'),
     h('div', { class: 'chat-ideas' }, CHAT_IDEAS.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x))));
   log.replaceChildren(...(list.length ? list.map(chatEntry) : [welcome]));
@@ -3502,8 +3502,8 @@ function chatEntry(e) {
     e.said?.length ? h('ul', { class: 'said' }, e.said.map(s => h('li', { class: s.startsWith('✗') ? 'no' : '' }, s.replace(/^[✓✗] /, '')))) : null,
     e.diff?.length ? h('div', { class: 'diff' }, h('small', {}, 'What changed'), h('ul', {}, e.diff.map(d => h('li', {}, d)))) : null,
     e.ideas?.length ? h('div', { class: 'chat-ideas' }, h('small', {}, e.lost ? 'Closest things I can do:' : 'Try next:'), ...e.ideas.map(x => h('button', { class: 'btn small', onclick: () => sendChat(x) }, x)),
-      e.lost && !aiKey() ? h('button', { class: 'btn small', title: 'A real AI understands anything you type. It’s free.', onclick: aiDialog }, 'Connect a free AI for this') : null,
-      e.lost && e.ask && !aiKey() && !ui.smart && smartAvailable() ? h('button', { class: 'btn small', title: 'A free AI model on this computer reads what the rules don’t', onclick: () => { toggleSmart(); sendChat(e.ask); } }, 'Ask the smart brain instead') : null) : null,
+      e.lost && !aiName() ? h('button', { class: 'btn small', title: 'A real AI understands anything you type. It’s free.', onclick: aiDialog }, 'Connect a free AI for this') : null,
+      e.lost && e.ask && !aiName() && !ui.smart && smartAvailable() ? h('button', { class: 'btn small', title: 'A free AI model on this computer reads what the rules don’t', onclick: () => { toggleSmart(); sendChat(e.ask); } }, 'Ask the smart brain instead') : null) : null,
     live ? h('div', { class: 'review' },
       h('button', { class: 'key primary btn', onclick: () => reviewChat(e, 'keep') }, 'Keep'),
       h('button', { class: 'btn', onclick: () => reviewChat(e, 'undo') }, 'Undo'),
@@ -3604,7 +3604,7 @@ async function sendChat(text) {
   $('#chat-in').value = '';
   const log = chatLog();
   log.push({ who: 'you', text });
-  const before = songJSON(), answer = aiKey() ? null : answerQuestion(text), sel = answer ? null : selectionEdit(text);
+  const before = songJSON(), answer = aiName() ? null : answerQuestion(text), sel = answer ? null : selectionEdit(text);
   if (sel) commit(songJSON());  // into the undo history now, so Keep, Undo and A/B point at this change
   if (answer || sel) log.push({ who: 'brain', text: answer?.text ?? sel, ideas: answer?.ideas, ...(sel && before !== songJSON() ? { diff: diffSongs(JSON.parse(before), song), at: history.at } : {}) });
   else {

@@ -1,0 +1,16 @@
+# BeatLab AI: the free AI behind the studio's chat (worker.js), on Cloudflare's free plan. Set it up once, from this folder:
+#   npx wrangler login                  signs in to your Cloudflare account in the browser
+#   npx wrangler deploy                 prints the address that goes in beatlab/brain.js
+#   npx wrangler secret put GROQ_KEY    paste your Groq key when it asks: Cloudflare keeps it, no file does
+name = "beatlab-ai"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# 5 chat messages a minute per visitor IP: the Limit counter in worker.js (Durable Objects are on the free plan)
+[[durable_objects.bindings]]
+name = "LIMIT"
+class_name = "Limit"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Limit"]
