@@ -157,19 +157,21 @@ export function kitRoles(files) {
 
 // FL instruments that suit each style, matched against their folders and names. Bass is only swapped
 // where a played bass suits the style; trap and drill keep their 808.
+// Melodies get instruments that speak at once (pianos, keys, plucked strings, a solo voice), never a slow
+// section patch, which smears a fast line into mush. Section sounds (choirs, string sections) suit the chords.
 export const STYLE_SOUNDS = {
-  trap: { chords: /Choir (Ahh|Ooh)|Strings Section|Stage Grand|PAD (Fantasy|Cloud|AirChorus)/i, melody: /Rhodes|Strings Solo|Piano Electric|Woodwind/i },
+  trap: { chords: /Choir (Ahh|Ooh)|Strings Section|Stage Grand|PAD (Fantasy|Cloud|AirChorus)/i, melody: /Rhodes|Close Grand|Stage Grand|Piano Electric/i },
   drill: { chords: /Strings Section|Choir (Ahh|Ooh)|Orchestral\/Strings/i, melody: /Close Grand|Stage Grand|Strings Solo/i },
-  rnb: { chords: /Rhodes|Keyboard\/Electric|Close Grand/i, melody: /Rhodes|Strings Solo|Guitar\/Jazz/i, bass: /Bass\/(Ibanez|Classic 80|Temptated)/i },
-  lofi: { chords: /Rhodes|Keyboard\/Electric|Close Grand|Guitar\/Jazz/i, melody: /Guitar\/(Jazz|Piezo)|Rhodes|Woodwind/i, bass: /Bass\/(Acoustic|Classic 80)/i },
-  boombap: { chords: /Rhodes|Grand|Guitar\/Jazz|Piano 2/i, melody: /Tenor Sax|Trombone|Brass Section|Strings Solo/i, bass: /Bass\/(Acoustic|Classic 80)/i },
-  afro: { chords: /Rhodes|Keyboard\/Electric|Strat|Picked Humb/i, melody: /Strat Pos|Classical Acoustic|Woodwind/i, bass: /Bass\/(Slap|Ibanez|Temptated)/i },
-  amapiano: { chords: /Rhodes|Keyboard\/Electric|Grand/i, melody: /Woodwind|Strings Solo|Rhodes/i },
-  house: { chords: /Stage Grand|Keyboard\/Grand|Rhodes|Choir/i, melody: /Strings Section|PAD/i },
-  reggaeton: { chords: /Grand|Classical Acoustic|Strings Section/i, melody: /Classical Acoustic|Strings Solo|Brass Section/i },
+  rnb: { chords: /Rhodes|Keyboard\/Electric|Close Grand/i, melody: /Rhodes|Guitar\/Jazz|Close Grand/i, bass: /Bass\/(Ibanez|Classic 80)/i },
+  lofi: { chords: /Rhodes|Keyboard\/Electric|Close Grand|Guitar\/Jazz/i, melody: /Guitar\/(Jazz|Piezo)|Rhodes|Close Grand/i, bass: /Bass\/(Acoustic|Classic 80)/i },
+  boombap: { chords: /Rhodes|Grand|Guitar\/Jazz|Piano 2/i, melody: /Tenor Sax|Trombone|Strings Solo|Close Grand/i, bass: /Bass\/(Acoustic|Classic 80)/i },
+  afro: { chords: /Rhodes|Keyboard\/Electric|Strat|Picked Humb/i, melody: /Strat Pos|Classical Acoustic|Guitar\/Jazz/i, bass: /Bass\/(Slap|Ibanez)/i },
+  amapiano: { chords: /Rhodes|Keyboard\/Electric|Grand/i, melody: /Rhodes|Stage Grand|Strings Solo/i },
+  house: { chords: /Stage Grand|Keyboard\/Grand|Rhodes|Choir/i, melody: /Stage Grand|Keyboard\/Grand|Rhodes/i },
+  reggaeton: { chords: /Grand|Classical Acoustic|Strings Section/i, melody: /Classical Acoustic|Strings Solo|Stage Grand/i },
   phonk: { chords: /Choir|Legacy\/Instruments\/Choirs|PAD/i },
-  pop: { chords: /Stage Grand|Keyboard\/Grand|Strat|Rhodes/i, melody: /Strings Section|Choir|Piezo/i },
-  desi: { chords: /Strings Section|Grand|Choir/i, melody: /Strings Solo|Woodwind|Classical Acoustic/i },
+  pop: { chords: /Stage Grand|Keyboard\/Grand|Strat|Rhodes/i, melody: /Piezo|Strat Pos|Stage Grand|Rhodes/i },
+  desi: { chords: /Strings Section|Grand|Choir/i, melody: /Strings Solo|Classical Acoustic|Stage Grand/i },
 };
 
 // A drum hit's takes from softest to loudest, at most `max` of them spread across the range

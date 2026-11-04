@@ -388,11 +388,14 @@ function buildHarmony(st, tonic, complexity, r, bars, chosen) {
 }
 export const chordAt = (harmony, t) => harmony.findLast(c => c.t <= t) ?? harmony[0];
 
+// A player's looseness, kept small so it feels played and never sloppy: notes struck together (a chord, a
+// strum) move together by a tick or so, ends stay put, and the loudness varies a little.
 function humanize(notes, r, feel) {
-  const dv = feel * 120, dt = Math.round(feel * 40);
+  const dt = Math.round(feel * 12), dv = feel * 90, hits = new Map();
   return notes.map(n => {
-    const s = Math.min(Math.floor(r() * (dt + 1)), n.d - 1);  // starts drift late, ends stay put
-    return { ...n, t: n.t + s, d: n.d - s, v: clamp(Math.round(n.v + (r() * 2 - 1) * dv), 1, 127) };
+    const key = Math.floor(n.t / STEP), hit = hits.get(key) ?? hits.set(key, { s: Math.floor(r() * (dt + 1)), v: (r() * 2 - 1) * dv }).get(key);
+    const s = Math.min(hit.s, n.d - 1);  // only ever a touch late, so nothing slips back over a bar line
+    return { ...n, t: n.t + s, d: n.d - s, v: clamp(Math.round(n.v + hit.v + (r() * 2 - 1) * 2), 1, 127) };
   });
 }
 
@@ -401,10 +404,10 @@ function humanize(notes, r, feel) {
 const LAY = { snare: 1, openhat: 0.45, perc: 0.6, hat: 0.25, kick: 0 };
 const HAT_ACCENT = [1, 0.72, 0.87, 0.76];
 function pocket(notes, id, st, r) {
-  const back = st.feel * 40;  // ticks behind the beat for the laid-back parts: about 1 in trap, 4 in lofi
+  const back = st.feel * 18;  // ticks behind the beat for the laid-back parts: under 1 in trap, about 2 (15 ms) in lofi
   return notes.map(n => {
     const ghost = n.v < 70, accent = id === 'hat' && !ghost ? HAT_ACCENT[Math.round(n.t / STEP) % 4] : 1;
-    const late = Math.round(back * (LAY[id] ?? 0.3) + (r() - 0.5) * (id === 'kick' ? 1 : 2.5));
+    const late = Math.round(back * (LAY[id] ?? 0.3) + (r() - 0.5) * (id === 'kick' ? 0.6 : id === 'hat' ? 1.6 : 1));
     return { ...n, t: Math.max(0, n.t + late), v: clamp(Math.round(n.v * accent + (r() * 2 - 1) * (ghost ? 4 : 7)), 1, 127) };
   });
 }
@@ -451,22 +454,23 @@ function buildDrums(st, energy, r, bars, groove) {
   return out;
 }
 
-function buildBass(st, harmony, kick, r, bars) {
-  const cfg = st.bass, [lo, hi] = BASS_RANGE[cfg.sound], notes = [];
-  let prev = (lo + hi) / 2;
-  const rootNote = t => {
-    const pc = chordAt(harmony, t).root;
-    let best = lo;
-    for (let n = lo; n <= hi; n++) if (n % 12 === pc && Math.abs(n - prev) < Math.abs(best - prev)) best = n;
-    return (prev = best);
+function buildBass(st, harmony, kick, r, bars, scale) {
+  const cfg = st.bass, [lo, hi] = BASS_RANGE[cfg.sound], notes = [], centre = (lo + hi) / 2;
+  let prev = centre;
+  const rootNote = t => {  // the chord's root, near the last bass note but pulled back toward the middle
+    const pc = chordAt(harmony, t).root, around = (prev + centre) / 2;
+    let best = null;
+    for (let n = lo; n <= hi; n++) if (n % 12 === pc && (best === null || Math.abs(n - around) < Math.abs(best - around))) best = n;
+    return (prev = best ?? lo);
   };
+  const slideTo = p => { const ok = [12, 7, -5].filter(iv => scale.includes(((p + iv) % 12 + 12) % 12)); return p + pick(r, ok.length ? ok : [12]); };  // octave or fifth, in key
   if (cfg.mode === 'kick') {  // 808 hits with every kick and rings until the next one
     const starts = [...new Set(kick.filter(n => n.v > 60).map(n => n.t))].sort((a, b) => a - b);
     starts.forEach((s, i) => {
       const end = Math.min(starts[i + 1] ?? bars * BAR, s + 2 * BAR), p = rootNote(s);
       if (cfg.slides && end - s >= 6 * STEP && r() < cfg.slides) {
         const mid = s + Math.round((end - s) / 2 / STEP) * STEP;
-        notes.push({ t: s, d: mid - s, p, v: 110 }, { t: mid, d: end - mid, p: p + pick(r, [12, 7, -2, 3, 10]), v: 100, g: 1 });
+        notes.push({ t: s, d: mid - s, p, v: 110 }, { t: mid, d: end - mid, p: slideTo(p), v: 100, g: 1 });
       } else notes.push({ t: s, d: end - s, p, v: 110 });
     });
   } else {  // written bass line: x root, o octave, f fifth, - hold, . rest
@@ -482,7 +486,7 @@ function buildBass(st, harmony, kick, r, bars) {
       }
     }
   }
-  return humanize(notes, r, st.feel / 2);
+  return humanize(notes, r, st.feel / 4);  // the bass sits with the kick
 }
 
 function buildChords(st, harmony, r) {
@@ -495,8 +499,8 @@ function buildChords(st, harmony, r) {
         if (i < harmony.length - 1) e -= STEP;
       }
       c.voicing.forEach((p, k) => {
-        const o = kind === 'roll' ? k * 3 : 0;
-        notes.push({ t: s + o, d: e - s - o, p, v: kind === 'roll' ? 66 + 5 * k : 80 });
+        const o = kind === 'roll' ? k : 0;  // a quick, even roll up the chord
+        notes.push({ t: s + o, d: e - s - o, p, v: kind === 'roll' ? 68 + 4 * k : 80 });
       });
       return;
     }
@@ -507,7 +511,8 @@ function buildChords(st, harmony, r) {
       let j = i16 + 1;
       while (j < 16 && pat[j] === '-') j++;
       const d = Math.min((j - i16) * STEP, e - t);
-      c.voicing.forEach((p, k) => notes.push({ t: t + k * 2, d: d - k * 2, p, v: 74 + 3 * k }));
+      const strum = kind === 'pluck' ? 1 : 0;  // a guitar strums a little; keys and stabs land together
+      c.voicing.forEach((p, k) => notes.push({ t: t + k * strum, d: d - k * strum, p, v: 74 + 3 * k }));
     }
   });
   return humanize(notes, r, st.feel);
@@ -580,8 +585,9 @@ function buildMelody(st, harmony, scale, r, complexity, density = 0) {
     m.forEach((o, k) => {
       const t = slot * 2 * BAR + o.t, chord = chordAt(harmony, t), tones = chordScale(chord.pcs, scale);
       p = p === null ? (slot === 3 && first != null ? stepIn(first, 2, chord.pcs, lo, hi) : nearestOf(first ?? lo + (hi - lo) * 0.6, chord.pcs, lo, hi)) : stepIn(p, o.move, tones, lo, hi);  // the answer starts higher
-      const strong = o.t % (8 * STEP) === 0 || o.d >= 4 * STEP, ending = k === m.length - 1;
+      const strong = o.t % (4 * STEP) === 0 || o.d >= 3 * STEP, ending = k === m.length - 1;  // on the beat, or held: a chord tone
       if (strong || ending) p = nearestOf(p, chord.pcs, lo, hi);
+      else if (o.d >= 2 * STEP && chord.pcs.some(c => [1, 11].includes(((p - c) % 12 + 12) % 12))) p = nearestOf(p, chord.pcs, lo, hi);  // no rubbing a semitone against the chord
       if (ending && slot === 3) p = nearestOf(p, [chord.root], lo, hi);  // the phrase comes home on the root
       if (prev.length === 2 && prev[0] === p && prev[1] === p) p = stepIn(p, r() < 0.5 ? 1 : -1, tones, lo, hi);  // never three in a row
       prev = [...prev.slice(-1), p];
@@ -597,12 +603,13 @@ export const SECTION_NAMES = ['Intro', 'Verse', 'Pre-hook', 'Hook', 'Bridge', 'B
 const DRUMS_AND_BASS = ['kick', 'snare', 'hat', 'openhat', 'perc', 'bass'];
 const defaultSections = () => [
   { name: 'Intro', bars: 4, pattern: 'A', off: [...DRUMS_AND_BASS, 'arp'] },
-  { name: 'Hook', bars: 8, pattern: 'A', off: [] },
-  { name: 'Verse', bars: 8, pattern: 'B', off: ['melody', 'arp'] },
-  { name: 'Hook', bars: 8, pattern: 'A', off: [] },
+  // the hook's melody and the verse's arp take turns, so two lines never fight over the same octave
+  { name: 'Hook', bars: 8, pattern: 'A', off: ['arp'] },
+  { name: 'Verse', bars: 8, pattern: 'B', off: ['melody'] },
+  { name: 'Hook', bars: 8, pattern: 'A', off: ['arp'] },
   { name: 'Verse', bars: 8, pattern: 'B', off: ['melody'] },
   { name: 'Bridge', bars: 4, pattern: 'B', off: ['kick', 'snare', 'bass', 'arp'] },
-  { name: 'Hook', bars: 8, pattern: 'A', off: [] },
+  { name: 'Hook', bars: 8, pattern: 'A', off: ['arp'] },
   { name: 'Outro', bars: 4, pattern: 'A', off: [...DRUMS_AND_BASS, 'arp'] },
 ];
 
@@ -617,7 +624,7 @@ export function generate({ style, bpm, root, mode, energy = 0.5, complexity = 0.
   const parts = {};
   for (const [id, d] of Object.entries(drums)) parts[id] = { notes: d.A, notesB: d.B, fill: d.fill };
   const bassRng = rng(seeds.bass);
-  parts.bass = { notes: buildBass(st, harmony, kick ?? drums.kick?.A ?? [], bassRng, bars), notesB: buildBass(st, harmony, kickB ?? drums.kick?.B ?? [], bassRng, bars) };
+  parts.bass = { notes: buildBass(st, harmony, kick ?? drums.kick?.A ?? [], bassRng, bars, scale), notesB: buildBass(st, harmony, kickB ?? drums.kick?.B ?? [], bassRng, bars, scale) };
   parts.chords = { notes: buildChords(st, harmony, rng(seeds.chords + 1)) };
   if (st.arp) parts.arp = { notes: buildArp(st, harmony, rng(seeds.chords + 2)) };
   const mr = rng(seeds.melody);
@@ -867,13 +874,23 @@ const KITS = {
 };
 
 // Choose an FL Studio sample for every drum track whose sound has a kit rule. `library` is a list of paths.
+// One kit, not a different one for every drum: the family (the first word of the file name, like "Grv" or
+// "909") that covers the most drums wins, and each drum takes a sample from it when it can
+const familyOf = path => path.replace(/\\/g, '/').split('/').pop().replace(/\.\w+$/, '').split(/[\s_]/)[0].toLowerCase();
 export function pickKit(song, library, r = rng(song.seeds.drums + 7)) {
-  const kit = KITS[STYLES[song.style].kit] ?? KITS.electronic, picks = {};
+  const kit = KITS[STYLES[song.style].kit] ?? KITS.electronic, picks = {}, options = {};
   for (const t of song.tracks) {
     if (t.kind !== 'drum') continue;
     const rule = kit[t.sound] ?? kit[t.id];
     const matches = rule ? library.filter(p => rule.some(re => re.test(p.replace(/\\/g, '/')))) : [];
-    if (matches.length) picks[t.id] = pick(r, matches);
+    if (matches.length) options[t.id] = matches;
+  }
+  const cover = new Map();
+  for (const [id, matches] of Object.entries(options)) for (const f of new Set(matches.map(familyOf))) cover.set(f, (cover.get(f) ?? 0) + (id === 'kick' || id === 'snare' ? 1.5 : 1));
+  const best = Math.max(0, ...cover.values()), families = [...cover].filter(([, n]) => n >= best * 0.7).map(([f]) => f).sort(), family = families.length ? pick(r, families) : null;  // any kit that covers most of the drums, for variety
+  for (const [id, matches] of Object.entries(options)) {
+    const same = matches.filter(p => familyOf(p) === family);
+    picks[id] = pick(r, same.length ? same : matches);
   }
   return picks;
 }

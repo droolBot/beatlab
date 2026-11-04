@@ -686,9 +686,10 @@ async function autoMix(say = true) {
     const l = await lufsOf(await render(song, p, dusty(), t.id, { sr: 48000, master: song.master }));
     if (Number.isFinite(l) && l > -70) measured.push({ t, vol: t.vol * 10 ** (clamp(want - l, -24, 24) / 20) });
   }
-  // The balance is what matters: everything moves together so the loudest part sits at full volume,
-  // and the master and the export's loudness target take care of the level
-  const k = Math.min(1, 1 / Math.max(1e-6, ...measured.map(x => x.vol)));
+  // The balance is what matters: everything moves together so the kick, snare and bass sit at full volume.
+  // A quiet sample elsewhere (a soft hat) can't drag the whole beat down with it; it just sits a little low.
+  const anchors = measured.filter(x => ['kick', 'snare'].includes(x.t.id) || x.t.kind === 'bass');
+  const k = Math.min(1, 1 / Math.max(1e-6, ...(anchors.length ? anchors : measured).map(x => x.vol)));
   for (const { t, vol } of measured) {
     const v = clamp(vol * k, 0.02, 1.2), moved = 20 * Math.log10(v / t.vol);
     t.vol = v;

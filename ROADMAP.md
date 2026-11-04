@@ -122,5 +122,14 @@
    conversation memory; real musical edits in edit.js; answers from the project in advice.js; piano roll
    Tools and ghosts; melodies with contours and phrase endings, drum turnarounds, new beats start mixed.
    Still to prove: a real model's musical results by ear, and the on-PC model on real hardware.
+   **Beats that don't clank (2026-11-04):** measured on rendered beats and their notes. The engine was clean
+   (no clicks, no cut-off notes, instruments in tune); the writing wasn't. A bug left the bass on the wrong
+   note 38% of the time (the 808 stuck on its lowest note); chords smeared over up to 94 ms and snares and
+   keys drifted up to 40 ms late at random; a third of drill's 808 slides were out of key; the arp and the
+   melody shared an octave in the hook; every drum came from a different kit; a quiet hat could make a whole
+   lofi beat 10 dB quieter. All fixed, with tests: the bass plays the chord's root, timing is a tick or two,
+   slides go to the octave or fifth, the arp moves to the verses, kits come from one family, the 808 cuts
+   itself, the sidechain lets go fast, the bell is in tune with the chords, melodies use fast-speaking FL
+   instruments.
 5. **Depth:** every synth voice on the audio thread for lower CPU, sends between inserts, ghost channels,
    collaboration from a shared link, a brain that learns from your past beats, and more of FL's long tail.

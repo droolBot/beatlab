@@ -52,7 +52,7 @@ export const PARAMS = {
   guitar: [['tone', 'Tone', 800, 8000, 3800], ['sustain', 'Sustain', 0, 1, 0.5]],
   sitar: [['buzz', 'Buzz', 0, 1, 0.6], ['sustain', 'Sustain', 0, 1, 0.6]],
   pluck: [['cutoff', 'Cutoff', 1, 24, 12], ['decay', 'Decay', 0.05, 1, 0.25]],
-  bell: [['bright', 'Brightness', 0, 1, 0.6], ['decay', 'Decay', 0.2, 3, 0.7], ['ratio', 'Ratio', 1, 8, 3.5]],
+  bell: [['bright', 'Brightness', 0, 1, 0.5], ['decay', 'Decay', 0.2, 3, 0.7], ['ratio', 'Ratio', 1, 8, 3]],  // a whole-number ratio keeps the overtones in tune with the chords
   flute: [['breath', 'Breath', 0, 1, 0.4], ['vibrato', 'Vibrato', 0, 1, 0.5]],
   lead: [['cutoff', 'Cutoff', 500, 8000, 3200], ['detune', 'Detune', 0, 40, 12], ['vibrato', 'Vibrato', 0, 40, 12], ['glide', 'Glide', 0, 0.3, 0]],
   vox: [['vowel', 'Ah to oo', 0, 1, 0], ['breath', 'Breath', 0, 1, 0.3]],
@@ -239,12 +239,17 @@ const SYNTHS = {
   },
   808(e, out, t, p, d, a, n, P) {
     const c = e.ctx, f = mtof(p), o = osc(c, 'sine', f, t), sh = c.createWaveShaper(), g = c.createGain(), end = t + Math.max(0.15, d);
+    // One 808 at a time, like FL's "cut itself": the last note fades out fast instead of ringing into this one,
+    // where two sines a few hertz apart would beat against each other
+    const last = (e.mono ??= new Map()).get(out);
+    if (last && last.until > t) { last.g.gain.cancelScheduledValues(t); last.g.gain.setTargetAtTime(0.0001, t, 0.006); }
+    e.mono.set(out, { g, until: end + 0.3 });
     if (n.g && n.from != null) {  // slide from the previous note
       o.frequency.setValueAtTime(mtof(n.from), t);
       o.frequency.exponentialRampToValueAtTime(f, t + P.glide);
-    } else {
-      o.frequency.setValueAtTime(f * 2, t);
-      o.frequency.exponentialRampToValueAtTime(f, t + 0.04);
+    } else {  // a short drop into the note for punch, not a cartoon "boing"
+      o.frequency.setValueAtTime(f * 1.5, t);
+      o.frequency.exponentialRampToValueAtTime(f, t + 0.03);
     }
     sh.curve = drive(P.drive);
     g.gain.setValueAtTime(0.0001, t);
@@ -918,6 +923,7 @@ export class Engine {
       s.rev.gain.value = dry ? 0 : t.rev;
       s.dly.gain.value = dry ? 0 : t.dly;
       s.depth = t.duck ?? 0;
+      s.recover = t.kind === 'bass' ? [0.015, 0.03] : [0.04, 0.09];  // the bass comes straight back after the kick's click; pads breathe
       this.setEffects(s, dry ? [] : t.fx ?? []);
     }
   }
@@ -963,6 +969,7 @@ export class Engine {
     }
     this.strips = new Map();
     this.open = [];
+    this.mono = new Map();
   }
 
   play(track, n, when, spt, dest = null) {
@@ -1022,8 +1029,9 @@ export class Engine {
   pump(t) {  // sidechain: every kick ducks the strips that ask for it
     for (const s of this.strips.values()) {
       if (!s.depth) continue;
+      const [hold, release] = s.recover ?? [0.04, 0.09];
       s.duck.gain.setTargetAtTime(1 - s.depth * 0.85, t, 0.004);
-      s.duck.gain.setTargetAtTime(1, t + 0.04, 0.09);
+      s.duck.gain.setTargetAtTime(1, t + hold, release);
     }
   }
 

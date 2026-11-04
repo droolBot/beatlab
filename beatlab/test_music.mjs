@@ -1,6 +1,6 @@
 // Run: node beatlab/test_music.mjs
 import assert from 'node:assert/strict';
-import { STYLES, BAR, generate, arrange, regenerate, transpose, changeMode, suggestStyles, pickKit, notesFor, songLength, patternOf, upgrade } from './music.js';
+import { STYLES, BAR, STEP, generate, arrange, regenerate, transpose, changeMode, suggestStyles, pickKit, notesFor, songLength, patternOf, upgrade, chordAt, songScale } from './music.js';
 
 const seeds = { chords: 1, drums: 2, bass: 3, melody: 4 };
 const hookOf = song => song.patterns.find(p => p.name === 'Hook').id;
@@ -29,6 +29,24 @@ for (const style of Object.keys(STYLES)) {
       }
       const fx = arrange(song, 'song').events.find(e => e.track.id === 'fx').notes;
       assert(fx.some(n => n.p === 60) && fx.some(n => n.p === 61), `${style}: risers and impacts around hooks`);
+    }
+  }
+}
+
+// What made beats sound off: the bass on the wrong note, slides out of key, chords smeared, two lines at once
+for (const style of Object.keys(STYLES)) {
+  for (const root of [0, 4, 9]) {
+    for (const s of [1, 2, 3]) {
+      const g = generate({ style, bpm: STYLES[style].bpm[2], root, mode: 'minor', seeds: { chords: s, drums: s + 10, bass: s + 20, melody: s + 30 } }), h = hookOf(g), scale = songScale(g);
+      for (const n of notesFor(g.tracks.find(t => t.id === 'bass'), h)) {
+        const iv = ((n.p - chordAt(g.harmony, n.t % (8 * BAR)).root) % 12 + 12) % 12;
+        if (n.g) assert(scale.includes(n.p % 12), `${style} in ${root}: an 808 slide to ${n.p} is out of key`);
+        else assert([0, 7].includes(iv), `${style} in ${root}: bass note ${n.p} at ${n.t} isn't the chord's root`);
+      }
+      const chords = notesFor(g.tracks.find(t => t.id === 'chords'), h), slots = new Map();
+      for (const n of chords) (slots.get(Math.floor(n.t / STEP)) ?? slots.set(Math.floor(n.t / STEP), []).get(Math.floor(n.t / STEP))).push(n.t);
+      for (const ts of slots.values()) assert(Math.max(...ts) - Math.min(...ts) <= 4, `${style}: a chord's notes land ${Math.max(...ts) - Math.min(...ts)} ticks apart`);
+      if (STYLES[style].arp) assert.equal(notesFor(g.tracks.find(t => t.id === 'arp'), h).length, 0, `${style}: the arp leaves the hook to the melody`);
     }
   }
 }
